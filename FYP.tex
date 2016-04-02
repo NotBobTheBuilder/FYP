@@ -1,0 +1,156 @@
+\documentclass[british, twoside]{bhamthesis}
+\title{Applying Static Type Checking to JavaScript}
+\author{Jack Wearden}
+\supervisor{Hayo Thielecke}
+\degree{BSc Computer Science}
+\department{Computer Science}
+\date{April 2016}  %% Version 2009/12/26
+
+\usepackage{listings}
+\usepackage{babel}
+\usepackage{csquotes}
+\usepackage{amsthm}
+\usepackage{amssymb}
+\usepackage{amsmath,array,booktabs}
+\usepackage[sorting=nyt,style=apa]{biblatex}
+\DeclareLanguageMapping{british}{british-apa}
+\addbibresource{bhamthesis.bib}
+
+\newtheorem*{thm}{Theorem}
+
+\theoremstyle{definition}
+\newtheorem*{defn}{Definition}
+
+\newcommand{\mar}[1]{\marginpar{\raggedright#1}}
+\newcommand{\clsname}{\textsf{bhamthesis}}
+\newcommand{\bktitle}[1]{\textit{#1}}
+\newcommand{\ZF}{\mathrm{ZF}}
+\newcommand{\IN}{\mathbb{N}}
+
+\newcommand{\hmcolon}{{\mspace{2mu}:\mspace{2mu}}}
+
+\makeatletter
+\newcommand{\Cen}[2]{%
+  \ifmeasuring@
+    #2%
+  \else
+    \makebox[\ifcase\expandafter #1\maxcolumn@widths\fi]{$\displaystyle#2$}%
+  \fi
+}
+\makeatother
+
+\lstdefinelanguage{JavaScript}%
+ {morekeywords={function, return, var, if, else, for, while, continue, break};%
+   }[keywords,comments,strings]
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\end{abstract}
+
+\tableofcontents
+
+\chapter{Introduction}
+
+\chapter{Background}
+
+  \subsection{JavaScript}
+    Created in 1995 by Brendan Eich, JavaScript aimed to enhance the existing capabilities of HTML and CSS by allowing developers to program custom behaviour on pages viewed in Netscape Navigator.
+
+    Today, JavaScript is the only programming language supported by all major browsers, and as a result has a huge footprint in the technology industry. As well as having dominance on the desktop and mobile web, it's increasingly used for server side and desktop applications through Node.js.
+
+    Though it’s C-like syntax and presence of “Java” in the name implies it might be an imperative or object-oriented language, it’s origins really derive from from Self, a Smalltalk dialect. JavaScript has closures and first class functions, and due to being predicated on running in a single-threaded environment, it makes heavy use of those features in conjunction with asynchronous programming to manage blocking operations.
+
+    As well as having dynamic types, JavaScript makes use of implicit type coercion, often causing unexpected results.
+
+    \begin{lstlisting}[language=JavaScript]
+      0 + "" == "0"
+      "0" - 1 == -1
+      "" - "" == 0
+      {} + [] == 0
+      [] + {} == '[object Object]’
+      "   " == 0 == true
+    \end{lstlisting}
+
+    While these simple cases are unusual the complexity they cause in large programs can be quite substantial. Often, a value might be implicitly coerced between types without a programmer expecting it to have happened. This error might not be noticed until a non-existent method is called on it (for example, attempting to append numbers instead of strings), or alternatively it could be serialised and sent to a server, where it's rejected for having the wrong type.
+
+    Regardless of what happens, the error will be detected at a line of code totally unrelated to the location of the coercion which caused it. The added complexity of finding the underlying bug can be substantial, especially when third-party libraries are involved, since they have their own semantics and untyped APIs.
+
+    Despite having some quirks though, the core of JavaScript is simple enough to express some powerful programs. Douglas Crockford writes in “JavaScript: The Good Parts”:
+
+    \begin{quote}
+      In JavaScript, there is a beautiful, elegant, highly expressive language that is buried under a steaming pile of good intentions and blunders. The best nature of JavaScript is so effectively hidden that for many years the prevailing opinion of JavaScript was that it was an unsightly, incompetent toy. My intention here is to expose the goodness in JavaScript, an out- standing, dynamic programming language. JavaScript is a block of marble, and I chip away the features that are not beautiful until the language’s true nature reveals itself. I believe that the elegant subset I carved out is vastly superior to the language as a whole, being more reliable, readable, and maintainable.
+    \end{quote}
+    \autocite{Crockford2008}
+
+  \subsection{Existing Implementations}
+    One consequence of JavaScript's status as the de-facto language of the front-end web is that until recently there's been no easy way out of using it, and as such tools have developed to mitigate the risk of introducing errors that aren't caught at deployment time. These range from supplementary tools like linters and testing frameworks, through to bigger solutions such as new programming languages and so called transpilers that compile other languages to JavaScript.
+
+  \subsubsection{Code Quality Tools}
+
+    Starting with the simpler cases, the tools with the lowest overhead for programmers to add to their projects are usually linters. These exist for many programming languages (with the original Lint program being for C), and the JavaScript implementations are JSLint or JSHint. Both perform the same purpose - to alert the programmer to syntax errors or stylistic mistakes - though JSHint is often considered less opinionated and dogmatic. Neither have any type inference capabilities, and they solely focus on the syntactic structure of the program. As such, they're a valuable tool for programmers and the were the first code analysis tool for JavaScript, but aren't comparable to what this project aims to achieve.
+
+  \subsubsection{Transpilers}
+
+    A recent phenomenon is the use of Emscripten\autocite{Zakai} to compile existing languages from LLVM bytecode into JavaScript. Emscripten is a backend for LLVM which takes the bytecode created by compilers for the language, and converts it into JavaScript, using web API calls where native ones would usually be used. One particularly impressive instance of this is recompiling the native desktop game Quake into a browser game, which was demonstrated by Mozilla at a conference in 2013\autocite{unrealengine}.
+
+  \subsubsection{TypeScript}
+
+    A more legitimate solution to the problem was created by Microsoft in 2012. TypeScript is a strict superset of JavaScript that supports optional typing. In addition, it adds multiple language features that aren't natively present in JavaScript - classes, interfaces and enums, to name a few. In doing so it does begin to drift away from JavaScript's own semantics and into a new domain, however for some developers this could be an acceptable decision to make.
+
+    It's likely, though, that this would not be an easy jump to make for developers of an existing or legacy piece of software. In particular, the addition of classes to TypeScript means it has a semantic separation between record types with well-typed properties, and objects (which in JavaScript are simply string-expression hashmaps). As such, an array of JavaScript-style objects with varying properties does not have the same quality of type inference as an array of class instances.
+
+    To highlight a specific problem, the expression:
+    \begin{lstlisting}
+      [{'foo': 3, 'bar': 3}, {'foo': 2, 'baz': 3}]
+    \end{lstlisting}
+    has the union type
+    \begin{lstlisting}
+      ( {'foo': number, 'bar': number}
+       |{'foo': number, 'baz': number})[]
+    \end{lstlisting}
+
+    TypeScript can see that it's an array of inferable types, but can't go as far as to see what properties those objects have in common.
+
+    As such, any program which looped through that array while operating on the \texttt {bar} property would cause problems at runtime during the cases where it's undefined, and these problems would not be caught at compile time.
+
+    Obviously, this is just one problem where TypeScript is insufficient, but is an example of a general pattern in which reaping the benefits of the safety that TypeScript provides requires you to invest fully in its own language, which is a jump existing software may not be able to make.
+
+  \subsubsection{Flow}
+    Flow is likely the closest comparison to this project that's presently publicly available. While it's still young - it was first announced less than 6 months before the initial research for this project took place - it has a similar purpose.
+
+    Flow was created by Facebook to accompany their increasing number of tools and libraries for frontend JavaScript. It's a static type checking tool for JavaSript, which in principle supports many of the objectives of this project. However, at times it has similarities with TypeScript - in particular, it uses Union types in cases where other type schemes might use polymorphism, and so has a number of cases where type errors may be missed.
+
+    Not to mention, it's also a complicated tool to configure, and does encourage changing the source code of input programs to add annotations either in the source itself (making it incompatable with standard javascript) or in the comments (which can easily become outdated and incorrect if a function is refactored without updating the comments).
+
+    Most frustratingly, though, it's complicated to run and configure for a JavaScript project. It requires complex configuration files to be created, and each source file must be updated with an initial comment indicating it should be checked by flow, otherwise it would be skipped by default.
+
+  \subsection{Previous Research}
+
+    \subsubsection{Hindley-Milner}
+      First presented by Hindley in 1969, and later independently discovered by Milner in 1978, what is now known as the Hindley-Milner Type System is the foundation of ML's type inference algorithm, and is a core part of many others\autocite{Hindley1969}. Milners work also introduced Algorithm W, an algorithm for type checking programs conforming to that type system\autocite{Milner1978}. While JavaScript has some specific implementation details that mean it's not similar enough for a direct implementation of Algorithm W to be applicable, it does provide a solid foundation from which a JavaScript-specific type system could be designed.
+
+    \subsubsection{Gradual Typing}
+      Outside of statically type checked languages, much research has been done for the checking of programs written in dynamically typed languages.
+
+      Quasi-static typing\autocite{Thatte1989} is one approach in which a top type $\Omega$ is defined, representing the dynamic type. However, Siek \& Taha later observed that as rules exist within this type system which allow the up-casting of ground types to $\Omega$, as well as rules which allow down-casting of $\Omega$ to ground types. These rules can be used to show that some programs which are obviously incorrect to the human reader can type check without error because an incorrect type is cast up to $\Omega$ and back down to the correct type\autocite{Siek2006}.
+
+      That observation was made in the presentation of type checking research for dynamic functional languages. Siek \& Taha proposed a gradually typed lambda calculus along with a full type system and inference algorithm for it\autocite{Siek2006}. This research, in addition to research into Gradual Typing for Objects\autocite{Siek2007} provide a solid backdrop of research from which an implementation for JavaScript could be derived.
+
+
+\chapter{Specification}
+
+\chapter{Analysis}
+
+  \subsection{JavaScript Programs}
+
+\chapter{Design}
+
+  \subsection{Formalised Type system}
+
+
+  \subsection{Test}
+
+\printbibliography
+\end{document}

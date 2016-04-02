@@ -1,0 +1,67 @@
+Abstract
+
+Introduction
+
+  What is JavaScript?
+  Where is it used?
+  What problems can it lead to?
+  How are those problems currently solved?
+  How might they be better solved?
+  What does this project aim to do?
+
+Background
+
+  Describe JavaScript as a language - feature, inspiration, similarities / differences
+  What are some specific examples of type errors in JS?
+  How is type checking performed in statically typed programming languages?
+  What research has been done into gradual typing in dynamic programming languages?
+  Are there any similar software examples that already exist?
+
+Specification
+
+Analysis
+
+  What features of existing research are transferrable to JavaScript?
+  Which are more challenging/require specific solutions?
+
+  How can JS' Type System be represented algebraically?
+  How can unification of those types be designed?
+
+Design
+
+  What are the core components of the software design?
+
+  How do those components relate to formal research and other examples?
+  What is the output of the program and how do users get feedback?
+
+Implementation
+
+  By what criteria was the implementing language chosen?
+
+  What algorithms underpinned the ocaml implementation?
+  What were the limitations of ocaml that required a switch to Scala?
+
+  How did the tokenisation problems with JS affect the structure of the parser?
+
+  How is the AST represented?
+
+Testing
+
+  How was the parser tested for completeness?
+  How were different elements of the programming language tested?
+
+Project Management
+
+Evaluation
+
+  What lessons were learned during the course of the project?
+  Evaluate (with hindsight) both the product and the process of its production
+  Review your plan and any deviations from it
+
+Discussion
+
+Conclusion
+
+References
+
+Appendices
