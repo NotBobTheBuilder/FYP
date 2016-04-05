@@ -7,6 +7,7 @@
 \date{April 2016}  %% Version 2009/12/26
 
 \usepackage{listings}
+\lstset{basicstyle=\ttfamily\scriptsize}
 \usepackage{babel}
 \usepackage{csquotes}
 \usepackage{amsthm}
@@ -43,6 +44,7 @@
  {morekeywords={function, return, var, if, else, for, while, continue, break};%
    }[keywords,comments,strings]
 
+
 \begin{document}
 \maketitle
 
@@ -55,7 +57,7 @@
 
 \chapter{Background}
 
-  \subsection{JavaScript}
+  \section{JavaScript}
     Created in 1995 by Brendan Eich, JavaScript aimed to enhance the existing capabilities of HTML and CSS by allowing developers to program custom behaviour on pages viewed in Netscape Navigator.
 
     Today, JavaScript is the only programming language supported by all major browsers, and as a result has a huge footprint in the technology industry. As well as having dominance on the desktop and mobile web, it's increasingly used for server side and desktop applications through Node.js.
@@ -69,8 +71,8 @@
       "0" - 1 == -1
       "" - "" == 0
       {} + [] == 0
-      [] + {} == '[object Object]’
-      "   " == 0 == true
+      [] + {} == "[object Object]"
+      "   " == 0
     \end{lstlisting}
 
     While these simple cases are unusual the complexity they cause in large programs can be quite substantial. Often, a value might be implicitly coerced between types without a programmer expecting it to have happened. This error might not be noticed until a non-existent method is called on it (for example, attempting to append numbers instead of strings), or alternatively it could be serialised and sent to a server, where it's rejected for having the wrong type.
@@ -84,20 +86,20 @@
     \end{quote}
     \autocite{Crockford2008}
 
-  \subsection{Existing Implementations}
+  \section{Existing Implementations}
     One consequence of JavaScript's status as the de-facto language of the front-end web is that until recently there's been no easy way out of using it, and as such tools have developed to mitigate the risk of introducing errors that aren't caught at deployment time. These range from supplementary tools like linters and testing frameworks, through to bigger solutions such as new programming languages and so called transpilers that compile other languages to JavaScript.
 
-  \subsubsection{Code Quality Tools}
+  \subsection{Code Quality Tools}
 
     Starting with the simpler cases, the tools with the lowest overhead for programmers to add to their projects are usually linters. These exist for many programming languages (with the original Lint program being for C), and the JavaScript implementations are JSLint or JSHint. Both perform the same purpose - to alert the programmer to syntax errors or stylistic mistakes - though JSHint is often considered less opinionated and dogmatic. Neither have any type inference capabilities, and they solely focus on the syntactic structure of the program. As such, they're a valuable tool for programmers and the were the first code analysis tool for JavaScript, but aren't comparable to what this project aims to achieve.
 
-  \subsubsection{Transpilers}
+  \subsection{Transpilers}
 
     A recent phenomenon is the use of Emscripten\autocite{Zakai} to compile existing languages from LLVM bytecode into JavaScript. Emscripten is a backend for LLVM which takes the bytecode created by compilers for the language, and converts it into JavaScript, using web API calls where native ones would usually be used. One particularly impressive instance of this is recompiling the native desktop game Quake into a browser game, which was demonstrated by Mozilla at a conference in 2013\autocite{unrealengine}.
 
-  \subsubsection{TypeScript}
+  \subsection{TypeScript}
 
-    A more legitimate solution to the problem was created by Microsoft in 2012. TypeScript is a strict superset of JavaScript that supports optional typing. In addition, it adds multiple language features that aren't natively present in JavaScript - classes, interfaces and enums, to name a few. In doing so it does begin to drift away from JavaScript's own semantics and into a new domain, however for some developers this could be an acceptable decision to make.
+    Another potential solution was created by Microsoft in 2012. TypeScript is a strict superset of JavaScript that supports optional typing. In addition, it adds multiple language features that aren't natively present in JavaScript - classes, interfaces and enums, to name a few. In doing so it does begin to drift away from JavaScript's own semantics and into a new domain, however for some developers this could be an acceptable decision to make.
 
     It's likely, though, that this would not be an easy jump to make for developers of an existing or legacy piece of software. In particular, the addition of classes to TypeScript means it has a semantic separation between record types with well-typed properties, and objects (which in JavaScript are simply string-expression hashmaps). As such, an array of JavaScript-style objects with varying properties does not have the same quality of type inference as an array of class instances.
 
@@ -115,23 +117,27 @@
 
     As such, any program which looped through that array while operating on the \texttt {bar} property would cause problems at runtime during the cases where it's undefined, and these problems would not be caught at compile time.
 
-    Obviously, this is just one problem where TypeScript is insufficient, but is an example of a general pattern in which reaping the benefits of the safety that TypeScript provides requires you to invest fully in its own language, which is a jump existing software may not be able to make.
+    Another problematic case is of function inference. TypeScript will never infer any type signatures of functions beyond giving them a default parameter type of \texttt{any}. This means most of the code that developers write will gain no benefit from begin run through TypeScript, and to actually gain any type safety, developers would have to annotate function parameters as required by TypeScript, which would break compatability with the JavaScript syntax.
 
-  \subsubsection{Flow}
-    Flow is likely the closest comparison to this project that's presently publicly available. While it's still young - it was first announced less than 6 months before the initial research for this project took place - it has a similar purpose.
+    These cases highlight a general pattern in which reaping the benefits of the type safety which TypeScript provides requires you to invest fully in its own language, which is a jump existing software may not be able to make.
+
+  \subsection{Flow}
+    Flow is the closest comparison to this project that's presently publicly available. While it's still young - it was first announced less than 6 months before the initial research for this project took place - it has a similar purpose and a substantial effort behind it in the form of Facebook.
 
     Flow was created by Facebook to accompany their increasing number of tools and libraries for frontend JavaScript. It's a static type checking tool for JavaSript, which in principle supports many of the objectives of this project. However, at times it has similarities with TypeScript - in particular, it uses Union types in cases where other type schemes might use polymorphism, and so has a number of cases where type errors may be missed.
+
+    One example of where flow's use of union types causes false negatives to be given can be seen in the inference of expressions and structures which involve, among other language features, the overloaded + operator. This operator is a problematic addition to the language which readers will see regularly used as a yard stick for testing the quality of a type checking implementation. As will be mentioned in the design phase, + is valid for Numbers and Strings, but causes type coercion when used on a mixed pair of subexpressions. Flow infers the types of expressions involved in a + operation as being \texttt{number | string}, and as such provides no security against \texttt{2 + "3"} as both sides of the expression satisfy the type constraint, which fails to express that both subexpressions must be of the same type.
 
     Not to mention, it's also a complicated tool to configure, and does encourage changing the source code of input programs to add annotations either in the source itself (making it incompatable with standard javascript) or in the comments (which can easily become outdated and incorrect if a function is refactored without updating the comments).
 
     Most frustratingly, though, it's complicated to run and configure for a JavaScript project. It requires complex configuration files to be created, and each source file must be updated with an initial comment indicating it should be checked by flow, otherwise it would be skipped by default.
 
-  \subsection{Previous Research}
+  \section{Previous Research}
 
-    \subsubsection{Hindley-Milner}
-      First presented by Hindley in 1969, and later independently discovered by Milner in 1978, what is now known as the Hindley-Milner Type System is the foundation of ML's type inference algorithm, and is a core part of many others\autocite{Hindley1969}. Milners work also introduced Algorithm W, an algorithm for type checking programs conforming to that type system\autocite{Milner1978}. While JavaScript has some specific implementation details that mean it's not similar enough for a direct implementation of Algorithm W to be applicable, it does provide a solid foundation from which a JavaScript-specific type system could be designed.
+    \subsection{Hindley-Milner}
+      First presented by Hindley in 1969 and later independently discovered by Milner in 1978, what is now known as the Hindley-Milner Type System is the foundation of ML's type inference algorithm and is a core part of many others\autocite{Hindley1969}. Milners work also introduced Algorithm W, an algorithm for type checking programs conforming to that type system\autocite{Milner1978}. While JavaScript has some specific implementation details that mean it's not similar enough for a direct implementation of Algorithm W to be applicable, it does provide a solid foundation from which a JavaScript-specific type system could be designed.
 
-    \subsubsection{Gradual Typing}
+    \subsection{Gradual Typing}
       Outside of statically type checked languages, much research has been done for the checking of programs written in dynamically typed languages.
 
       Quasi-static typing\autocite{Thatte1989} is one approach in which a top type $\Omega$ is defined, representing the dynamic type. However, Siek \& Taha later observed that as rules exist within this type system which allow the up-casting of ground types to $\Omega$, as well as rules which allow down-casting of $\Omega$ to ground types. These rules can be used to show that some programs which are obviously incorrect to the human reader can type check without error because an incorrect type is cast up to $\Omega$ and back down to the correct type\autocite{Siek2006}.
@@ -141,16 +147,342 @@
 
 \chapter{Specification}
 
+  ``the structure of a type may be partially known/unknown at compile- time and the job of the type system is to catch incompatibilities between the known parts of types.''\autocite{Siek2006} is one which this project should pay attention to.
+
+  [] - consistency
+
+  [] - clarity
+
+  ???
+
 \chapter{Analysis}
 
-  \subsection{JavaScript Programs}
+  \section{Challenging parts of JavaScript}
+
+    In order to determine what elements of prior type checking research could be applied to JavaScript, we should consider what the hardest parts of the language would be to type check. These can then be borne in mind when deciding which approaches to use - thosse approaches which can either handle them already, or could be slgihtly adjusted to handle them, are preferable to those which would need more significant amendments.
+
+  \subsection{Higher-Kinded types}
+    While not given this name in any JavaScript literature, in other programming languages the idea of type constructors and higher-kinded types is well recognised. JavaScript only has three types that could be viewed this way - the Function, Number and Object types.
+
+    The primitive types are Number (a general type for positive and negative floats and ints, and also Infinity and -Infinity), String, Boolean, Regular Expression, Undefined and Null.
+
+    Below are some example Functions, annotated with what could be considered to be their `type'.
+
+    \begin{lstlisting}
+      function () {};                   () -> Undefined
+      function (a, b, c) {};            (Any, Any, Any) -> Undefined
+      function (a, b, c) {return 3;};   (Any, Any, Any) -> Number
+      function (a, b) {return a - b};   (Number, Number) -> Number
+    \end{lstlisting}
+
+    Additionally functions are first class, and can either be named or anonymously assigned to a variable:
+
+    \begin{lstlisting}
+      var add = function (a, b) {return a + b}; var b = add(1, 2);
+      function add (a, b) {return a + b}; var b = add(1, 2);
+    \end{lstlisting}
+
+    These cases are identical in terms of their behaviour and how they're treated by an interpreter. An obvious extension of the first class nature of functions is that it's also totally acceptable for functions to return other functions:
+
+    \begin{lstlisting}
+      var add = function (x, y) {return function(z) { return x + y + z }}
+    \end{lstlisting}
+
+    Some Objects, which are simply string-value maps in JavaScript:
+
+    \begin{lstlisting}
+      {a: 1}                            Object<a -> Number>
+      {a: 'Foo', b: false}              Object<a -> String, b -> Boolean>
+    \end{lstlisting}
+
+    And some Arrays:
+
+    \begin{lstlisting}
+      [1, 2, 3, 4, 5]                   Array<Number>
+      ['1', '2', '3', '4', '5']         Array<String>
+    \end{lstlisting}
+
+    More challenging is the case of determining what to do in these cases:
+
+    \begin{lstlisting}
+      [1, false, '3']
+    \end{lstlisting}
+
+    Where a common general type for all of the array members could not be found. Or similarly, this case:
+
+    \begin{lstlisting}
+      [{a: true}, {a: 5}]
+    \end{lstlisting}
+
+    Serious thought must be given to determining how to unify two objects with identical member names but different types for those members.
+
+  \subsection{Arbitrary-Length functions}
+    JavaScript functions can have any number of parameters, in contrast to lambda calculus and ML, where a function would take one parameter and return a function which takes a second (Or alternatively, would take a tuple of n parameters). Function calls can even supply a different number of parameters than a function is defined to take. Surplus parameters ignored, while unsupplied parameters default to \texttt {undefined} For example, this function:
+
+    \begin{lstlisting}
+      var add = function(a, b) { return a + b; };
+    \end{lstlisting}
+
+    Could be called with \texttt { add(1, 2, 500) } which would just return 3. Alternatively, calling \texttt {add ("") } would return \texttt {"undefined"}, as an empty string + undefined results in the literal word undefined.
+
+    Special consideration should be given to how to represent functions, and whether calls which supply a different number of parameters should be considered type-correct at all.
+
+  \subsection{Operator Overloading}
+    One significant cause of confusion in JavaScript is the overloading of the $+$ operator for Strings and Numbers. While working with strings, it serves as a method of concatenation, and with numbers, it carries out addition. While this doesn't outright cause any errors in consistency, it does lead to cases where an inferred type can be ambigious. The simplest case highlighting this ambiguity is an addition function - \texttt {function (a, b) { return a + b }}.
+
+    Different languages handle this in different ways. In ML and derivatives, the problem is entirely avoided as + is defined for Numbers alone. In Haskell, the function would have the type \texttt {Num a => a -> a -> a} - that is, the function is polymorphic over type \texttt{a}, so long as \texttt{a} implements the behaviour of the \texttt{Num} typeclass.
+
+    Whatever solution is decided for this, the inferred type of the add function should express that numbers are accepted, and strings are accepted, but both parameters must be of the same type.
+
+  \subsection{Implicit Type Coercion}
+    A number of examples of implicit coercion were listed in the introduction, for convenience here they are again:
+
+    \begin{lstlisting}[language=JavaScript]
+      0 + "" == "0"
+      "0" - 1 == -1
+      "" - "" == 0
+      {} + [] == 0
+      [] + {} == "[object Object]" // addition not commutative
+      "   " == 0
+    \end{lstlisting}
+
+    These type coercions usually occur when two values are operated upon by a single operator. In theory, type checking this should be achieveable by confirming firstly that the two values are of a type acceptable for the operator, an also are of the same type of each other. This would mean that \texttt{2 + 1} type checks, as does \texttt{"2" + "1"}, however \texttt{2 + "1"} does not.
+
+  \subsection{Reassignment}
+
+    A notable feature present in JavaScript but not in functional languages is that of reassignment - while JS has a functional flair, it still supports imperative programming, and with it, mutable state. Variables can be declared and reassigned to values with totally different types. Variables can even be declared with no value, left with the default value \texttt{undefined}, and only assigned a value later. These programs are totally correct JavaScript and don't necessarily cause type errors - how they are handled should be given specific consideration. A number of cases include
+
+    Delayed assignment:
+    \begin{lstlisting}
+      var x; x = 1;
+    \end{lstlisting}
+
+    Reassignment to different type:
+    \begin{lstlisting}
+      var x = 1; x = false;
+    \end{lstlisting}
+
+    Reassignment to more specific type:
+    \begin{lstlisting}
+      var x = [{a: 5, b: 2}]; x = [{a: 2}];
+    \end{lstlisting}
+
+    Or similarly:
+    \begin{lstlisting}
+      var x = function(a, b) {return a};
+      x = function(a, b) {return b};
+    \end{lstlisting}
+
+  \subsubsection{Summary}
+
+    Each of these are instances of valid operations within JavaScripts type system, and as such are likely to be used in real world programs. Care should be taken when considering a design for a solution to ensure that these cases are handled correctly. Ahead in the design section, a solution is proposed that meets these requirements with acceptable of programs that type check as incorrect.
+
+  \section{Approach}
+
+    Based off existing research there are 2 potential approaches to performing type inference. One would be to make direct use of the work acheived in Gradual Typing for Functional Languages\autocite{Siek2006} by reducing JavaScript programs down to a gradually typed lamda calculus, and performing the type checking on that lambda calculus. The other would be to perform type checking closer to that described in  Hindley \& Milner's work, by inferring types directly from the structure of a program using a formalised type system. Neither of these approaches are 1:1 implementable, but each approach has its own challenges.
+
+  \subsection{Gradually Typed Lambda Calculus}
+
+    Reducing JavaScript to a Gradually Typed Lambda Calculus in particular would be difficult, as there are features of the language which are not represented in the calculus they describe. Those include significant features to the language such as assignment and reassignment, the presence of the overloaded $+$ operator which works for JavaScript Strings and Numbers, and also arbitrary-size function parameters. While these challenges are not necessarily impossible to overcome, they do come at the added cost of another intermediate representation of the program being checked.
+
+    Another intermediate representation means another potential case of mistranslation of source code, and also another layer of complexity in connecting expressions undergoing type checking to the line-and-column where they appear in the source. While this complexity may be worthwile if the representation was already complete, in this case we would be converting to another intermediate representation to which we would have to define significant extensions, which seems unnecessary.
+
+  \subsection{Hindley Milner}
+  \label{subsec:Hindley Milner}
+
+    Though Hindley-Milner Type Inference is primarily used in statically typed languages, (and strictly functional ones too), it brought a number of important approaches to the problem of type checking. One is the distinction between the type system and the algorithm for checking types, and the other is the mapping of type inference onto the language's syntactic structure.
+
+    Some of the simpler HM rules are directly transferrable. In particular, the rule for variable type is usable\footnote{In this notation, $A$ represents an enviroment of assumptions, $e$ represents expressions, $x$ represents variables and $\sigma$ represents type schemes. Additionally, $A_x$ means an environment with no assumptions about $x$, and a type scheme is defined as $\sigma = \tau | \forall\alpha\mspace{3mu}\tau$}:
+
+    \begin{flalign*}
+      &&\Cen{3}{
+          \textsc{taut:}
+          \frac{}{A\vdash x\hmcolon\sigma}
+          (x\hmcolon\sigma\in A)
+        } &&&
+    \end{flalign*}
+
+    as well as rules for instantiation and generalisation:
+
+    \begin{flalign*}
+      &&\Cen{3}{
+          \textsc{inst:}
+          \frac{A\vdash e\hmcolon\sigma}{A\vdash e\hmcolon\sigma '}
+          (\sigma > \sigma ')
+        } &&&
+      \\
+      &&\\
+      &&\Cen{3}{
+          \textsc{gen:}
+          \frac{A\vdash e\hmcolon\sigma}{A\vdash e\hmcolon\forall\alpha\text{  } \sigma}
+          (\alpha \text{ not free in } A)
+        } &&&
+    \end{flalign*}
+
+    with some modification to support arbitrary parameter numbers, the abstraction and application rules would also be usable (original rules shown here):
+
+    \begin{flalign*}
+      &&\Cen{3}{
+          \textsc{abs:}
+          \frac{A_{x} \cup \{ x\hmcolon \tau ' \} \vdash e\hmcolon\tau}{A\vdash (\lambda x .e )\hmcolon \tau ' \rightarrow \tau}
+        } &&&
+      \\
+      &&\\
+      &&\Cen{3}{
+          \textsc{app:}
+          \frac{A\vdash e\hmcolon\tau '\rightarrow\tau\mspace{15mu}A\vdash e'\hmcolon\tau}{A\vdash (e\mspace{4mu}e')\hmcolon\tau}
+        } &&&
+    \end{flalign*}
+
+    however the $let..in$ rule would need some consideration:
+
+    \begin{flalign*}
+      &&\Cen{3}{
+          \textsc{let:}
+          \frac{A\vdash e\hmcolon\sigma\mspace{15mu}A_x \cup \{x\hmcolon\sigma\}\vdash e'\hmcolon\tau}{A\vdash (\texttt{let } x \texttt{ = } e \texttt{ in } e')\hmcolon\tau}
+        } &&&
+    \end{flalign*}
+
+    The Let rule defines the type of the declared variable within the scope of the $in$ expression, but in JavaScript the equivalent scope would be the scope of the whole function where the assignment took place as the variable can be referenced in later statements in the function. This is one case where the semantic difference between functional and imperative languages becomes important to acknowledge.
+
+    The above rules were taken from Principal type-schemes for functional programs\autocite{Damas1982}. Ahead in the design section is a modified version of these rules which supports features specific to JavaScript, as well as an updated let rule for mutable assignment.
 
 \chapter{Design}
 
-  \subsection{Formalised Type system}
+  \section{Formalised Type system}
+
+    To be able to design a system that can correctly check for type errors in JavaScript, we must first begin by laying out what the components of the type system are. Lets first remind ourselves of the ML-style language that Hindley-Milner type inference was designed for. That language, as taken from Principal type-schemes for functional programs \autocite{Damas1982}:
+    \begin{flalign*}
+      e~::=~x~|~e~e'~|~\lambda~x.e~|~\texttt{let}~x~=~e~\texttt{in}~e'&&
+    \end{flalign*}
+
+    This language doesn't have any features of imperative or object oriented programs - including no assignment, flow control or property access - so our type system rules will need to account for the features JavaScript has.
+
+    We begin by formalising the types available to our system:
+    \begin{flalign*}
+        \gamma~&::=~Number~|~String~|~Boolean~|~RegExp~|~Undefined~|~Null&&\\
+        \tau~&::=~\gamma~|~Function<\tau_{0..n},~\tau>~|~Array<\tau>~|~Object<(key\times\tau)_{0..n}>&&\\
+        \sigma~&::=~\tau~|~\{\tau_{1..n}\}~|~Any&&
+    \end{flalign*}
+
+    Using this type system we can see that we can already overcome a failing of TypeScript and Flow - where they use Union types and lose fidelity, we can the Set variant of our $\sigma$ type scheme. Specifically, if we revisit the idea of the polymorphic add function:
+
+    \begin{lstlisting}
+      (function (a, b){ return a + b})(1, '2')
+    \end{lstlisting}
+
+    In TypeScript, the above wrongly type checks as correct because a and b have the \texttt{any} type. This is because we didn't manually annotate those parameters with our own type.
+
+    In Flow, it wrongly type checks as correct because the inferred type of the function is too vague. It says the \texttt{a} and \texttt{b} parameters are of the union type \texttt{number | string}, which is partially correct. But what it doesn't express is that though the parameters can be of \textit{either} type, they must be of the \textit{same} type. And, in turn, the return value will also be of that type.
+
+    Our type system can express clearly that this is incorrect - the Function has a set of potential types. We can describe it as:
+    \begin{flalign*}
+        \{~Function<\{String,String\}, String>, Function<\{Number,Number\}, Number> \}
+    \end{flalign*}
+
+    That is, the function has 2 type signatures, both of which are valid and callable. The first is that it takes 2 strings and returns a string, and the second is that it takes 2 numbers and returns a number. However, and importantly, there is no variant of this which allows taking a number and a string. That means the anonymous call above can never type check as correct for this expression.
+
+    This is just one case where our approach is superior to existing tools, as Flow (which is by far the leading comparable tool) fails to detect type errors due to it's relying on union types.
+
+    However, the type system alone is not enough to define the behaviour of our system. We additionally need to define the structure of the language, here substantially simplified to the core structures that affect the type system:
+    \begin{flalign*}
+        op~&::=~e_1~\textsc{binop}~e_2~|~\textsc{unaryop}~e\\
+        e~&::=~x~|~[e_0, e_n]~|~\{k_0: e_0,~k_n: e_n\}~|~\texttt{function}(x_{0..n})~\{~js_{0..n}~\}~|~e(e_{0..n})~|~e\texttt{.} p~|~e_1[e_2]~|~op\\
+        js~&::=~e~|~\texttt{var}~x~|~\texttt{var}~x~=~e~|~x~=~e~|~\texttt{return}~e
+    \end{flalign*}
+
+    And given those structures, we additionally need to formulate the rules for type inference within that system. those rules are displayed overleaf, and kept together for the sake of legibility
+
+    \newpage
+
+    \begin{flalign*}
+      \textsc{variable:}&\mspace{20mu}
+      \frac{}{A\vdash x\hmcolon\sigma}
+      \mspace{20mu}
+      (x\hmcolon\sigma\in A)
+      \\\\
+      \textsc{function:}&\mspace{20mu}
+      \frac{A_{x_{0..n}}\cup \{ x_0:t_0, x_n:t_n \} \vdash e:\tau'}{A\vdash \texttt{function}(x_0:\tau_0,.. x_n:\tau_n)\{ \texttt{return}~e:\tau'\}: Function<\tau_{0..n}, \tau'>}
+      \\\\
+      \textsc{call:}&\mspace{20mu}
+      \frac{A \vdash e':Function<\sigma_{0..n}, \sigma'>\mspace{20mu} A\vdash \forall n~(e_n:\tau_n\wedge\tau_n \leqslant \sigma_n)}{A\vdash e'(e_0,..e_n): \sigma'}
+      \\\\
+      \textsc{define:}&\mspace{20mu}
+      \frac{A_x \vdash e:\tau\mspace{20mu} \texttt{var}~x~=~e}{A\vdash x: \tau}
+      \\\\
+      \textsc{declare:}&\mspace{20mu}
+      \frac{A_x \vdash \texttt{var}~x}{A\vdash x: Undefined}
+      \\\\
+      \textsc{assign:}&\mspace{20mu}
+      \frac{A \vdash (x:\sigma \vee x:Undefined)\mspace{20mu} e: \sigma' \mspace{20mu}x~=~e}{A\vdash x: \sigma'}
+      \mspace{20mu}
+      (\sigma'\leqslant\sigma)
+      \\\\
+      \textsc{property:}&\mspace{20mu}
+      \frac{A \vdash e:Object<y:\tau>}{A\vdash e\texttt{.}y:\tau}
+      \\\\
+      \textsc{element:}&\mspace{20mu}
+      \frac{A \vdash e:Array<\tau>\mspace{20mu} e':Number}{A\vdash e\texttt{[}e'\texttt{]}:\tau}
+      \\\\
+      \textsc{member:}&\mspace{20mu}
+      \frac{A \vdash e:Object<e':\tau>\mspace{20mu} e':String}{A\vdash e\texttt{[}e'\texttt{]}:\tau}
+      \\\\
+      \textsc{non member:}&\mspace{20mu}
+      \frac{A \vdash e:Object<ps>\mspace{20mu} e':String}{A\vdash e\texttt{[}e'\texttt{]}:Any}
+      \mspace{20mu}
+      (e' \notin ps)
+    \end{flalign*}
+
+    The underlying difference between these rules and the rules formulated by Hindley \& Milner is recognisable in the \textsc{define}, \textsc{declare} and \textsc{assign} rules. These are statements which have no type of their own, but help us infer the type of other expressions within a program. Such a concept - of a ``bare statement'' - does not exist in purely functional languages, and as such, when one appears in JavaScript code we use it as part of the premise of a deduction rather than the conclusion.
+
+    What remains is to define the unification of types. Below we define an intersection function which takes 2 types and produces the a type which is the intersection of the two of them. Those cases not covered here can be considered to return a type error.
+
+    \begin{flalign*}
+      \gamma&\cap\gamma~&=&~\gamma\\
+      Object<ps_1>&\cap~Object<ps_2>~&=&~Object<ps_1\cap ps_2>\\
+      Array<\sigma_1>&\cap~Array<\sigma_2>~&=&~Array<\sigma_1 \cap \sigma_2>\\
+      Function<ps_{0..n}, \sigma_1>&\cap~Function<qs_{0..n}, \sigma_2>~&=&~Function<zipWith(\cap, ps, qs),\\
+      & & &~~~~~~~~~~~~~~~~~~\sigma_1\cap\sigma_2> & \\
+      Any&\cap~other~&=&~other\\
+      \{\sigma_1,..\sigma_n\}&\cap~\sigma_n~&=&~\sigma_n\\
+    \end{flalign*}
+
+    In words, this system determines the unification of two types to be the most general type that can satisfy the constraints of both input types.
+
+    For ground types ($\gamma$) that is either the ground type itself when unifying the same ground type from 2 expressions, or a Type Error.
+
+    For Objects, it's the intersection of the properties of both objects. Similarly for arrays, it's the intersection of the types each array is composed of.
+
+    For Functions, each of the required parameter types are intersected, along with the return types. Any type errors occuring within either parameter intersections or return type intersection would mean this this intersection also evaluates to a type error.
+
+    The intersection of $Any$ with any other property simply returns the other property being unified, as it's always at least as specific as any (the case where it's the same specificity is $Any \cap Any$).
+
+    And the intersection between a set of types and a constant type occuring within that set is the constant type, as it's the most general type that can satisfy both sides.
+
+  \section{Software Structure}
+    The software architecture for this project will align quite closely with the common undertanding of compilers.
+
+    An initial parsing phase will produce an untyped Abstract Syntax Tree. As no type checking or inference will have been performed at this stage, the only information contained within this structure (besides the representation of the program) is the position within the raw source at which each element of the tree occurs. This is necessary to ensure that when a type error is detected, we can give the user a specific reference to where it occurred.
+
+    The major phase of the software's execution is to take the untyped abstract syntax tree and convert it into a typed abstract syntax tree. This new tree will be structured identically to the untyped tree, but will carry extra information about the types (and potentially type errors) of the statements and expressions at each level. It's a simple tree-traversal algorithm, in which any subtrees undergo type inference first, followed by unification by the rules defined in the previous section. In the case of rules relating to variables and scope, data about the types of variables is kept in an environment variable, which is simply a map of variables to their types (ensuring of course that identically named variables in different scopes don't affect each other).
+
+    Finally this typed tree will undergo error checking, looking for the locations within the tree where type errors occur, and feed that back into a number of locations in the source code which can be fed back to the user along with the tool's understanding of the error.
+
+\chapter{Implementation}
 
 
-  \subsection{Test}
+\chapter{Testing}
+  Testing of the system is comprehensive, covering the system as a whole as well as individual subcomponents.
+
+  \section{Parser Testing}
+
+  \section{Type System}
+    \subsection{Inference}
+
+    \subsection{Unification}
+
+\chapter{Evaluation}
+\chapter{Conclusion}
 
 \printbibliography
 \end{document}
