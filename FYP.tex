@@ -1,4 +1,4 @@
-\documentclass[british, twoside]{bhamthesis}
+\documentclass[british, twoside, openright]{bhamthesis}
 \title{Applying Static Type Checking to JavaScript}
 \author{Jack Wearden}
 \supervisor{Hayo Thielecke}
@@ -358,6 +358,8 @@
 
     This language doesn't have any features of imperative or object oriented programs - including no assignment, flow control or property access - so our type system rules will need to account for the features JavaScript has.
 
+    \subsection{JavaScript Types}
+
     We begin by formalising the types available to our system:
     \begin{flalign*}
         \gamma~&::=~Number~|~String~|~Boolean~|~RegExp~|~Undefined~|~Null&&\\
@@ -384,16 +386,21 @@
 
     This is just one case where our approach is superior to existing tools, as Flow (which is by far the leading comparable tool) fails to detect type errors due to it's relying on union types.
 
-    However, the type system alone is not enough to define the behaviour of our system. We additionally need to define the structure of the language, here substantially simplified to the core structures that affect the type system:
+    \subsection{Language Structure}
+
+    The type system alone is not enough to define the behaviour of our system. We additionally need to define the structure of the language, here substantially simplified to the core structures that affect the type system:
     \begin{flalign*}
-        op~&::=~e_1~\textsc{binop}~e_2~|~\textsc{unaryop}~e\\
-        e~&::=~x~|~[e_0, e_n]~|~\{k_0: e_0,~k_n: e_n\}~|~\texttt{function}(x_{0..n})~\{~js_{0..n}~\}~|~e(e_{0..n})~|~e\texttt{.} p~|~e_1[e_2]~|~op\\
-        js~&::=~e~|~\texttt{var}~x~|~\texttt{var}~x~=~e~|~x~=~e~|~\texttt{return}~e
+        op~::=&~e_1~\textsc{binop}~e_2~|~\textsc{unaryop}~e\\
+        e~::=&~x~|~[e_0, e_n]~|~\{k_0: e_0,~k_n: e_n\}~|~\texttt{function}(x_{0..n})~\{~js_{0..n}~\}\\
+        &~|~e(e_{0..n})~|~e\texttt{.} p~|~e_1[e_2]~|~op\\
+        js~::=&~e~|~\texttt{var}~x~|~\texttt{var}~x~=~e~|~x~=~e~|~\texttt{return}~e
     \end{flalign*}
 
-    And given those structures, we additionally need to formulate the rules for type inference within that system. those rules are displayed overleaf, and kept together for the sake of legibility
+    And given those structures, we additionally need to formulate the rules for type inference within that system. those rules are displayed overleaf, kept together for the sake of legibility.
 
     \newpage
+
+    \subsection{Type Inference Rules}
 
     \begin{flalign*}
       \textsc{variable:}&\mspace{20mu}
@@ -435,6 +442,8 @@
 
     The underlying difference between these rules and the rules formulated by Hindley \& Milner is recognisable in the \textsc{define}, \textsc{declare} and \textsc{assign} rules. These are statements which have no type of their own, but help us infer the type of other expressions within a program. Such a concept - of a ``bare statement'' - does not exist in purely functional languages, and as such, when one appears in JavaScript code we use it as part of the premise of a deduction rather than the conclusion.
 
+    \subsection{Unification Rules}
+
     What remains is to define the unification of types. Below we define an intersection function which takes 2 types and produces the a type which is the intersection of the two of them. Those cases not covered here can be considered to return a type error.
 
     \begin{flalign*}
@@ -469,10 +478,226 @@
     Finally this typed tree will undergo error checking, looking for the locations within the tree where type errors occur, and feed that back into a number of locations in the source code which can be fed back to the user along with the tool's understanding of the error.
 
 \chapter{Implementation}
+  Before implementation began it was necessary to decide which language would be used for the implementation. The decision for which language to use was based on the outcome of implementing small parsers in 2 potential languages, OCaml and Scala. Each implementation parsed a simple subset of JavaScript, roughly aligning with this grammar:
+  \begin{flalign*}
+    exp~&:=~x~|~num~|~str~|~\texttt{function(}~x_0..x_n~\texttt{) \{}~statement*~\texttt{\}}~|~exp~\texttt{(}~exp_0..exp_n~\texttt{)}\\
+    statement~&:=~\texttt{var}~x~\texttt{=}~exp~|~\texttt{var}~x~|~\texttt{return}~exp~|~exp\\
+    program~&:=~statement*\\
+  \end{flalign*}
 
+  The Ocaml implementation made use of Menhir, an LR parser generator, while the Scala version used an implementation of Parser Combinators\autocite{Hutton1996}, a tool which allows the compositon of smaller parsers into larger ones. Parser combinators often come at a cost of efficiency as backtracking is a core part of the operation of composed parsers, however we made use of a specific implementation based on Packrat Parsing\autocite{Ford2006} which makes heavy use of memoisation and can provide linear time complexity.
+
+  Neither implementation was particularly more challenging than the other, and so the decision of which language to use came down to the quality of the parsing tool and the ease of working with it. The reason behind this is that the bulk of this project involves analysis of ASTs, and it would add no benefit to the outcome to be spending any more time working with a grammar than is necessary.
+
+  From this requirement, the decision was made to work with OCaml, primarily because of the quality of Menhir. It provides a number of features which are lacking in Parser combinators - firstly the ability to separate the precedence of operators from the grammar itself, meaning expressions like $1 + 4 / 2 * 3$ can be parsed correctly without complicating the grammar by splitting expression rules into factors and terms. As it creates LR parsers, Menhir also allows left-recursive grammars, which Parser Combinators do not.
+
+  this turned out to be the wrong decision, resulting in a change to Scala in January. The following sections outline the implementation process for OCaml, the problems that arose causing the switch, and finally the implementation process for Scala.
+
+  \section{OCaml}
+    The OCaml implementation consisted of 4 core subsystems, similar to those discussed in the Design section. They are the lexer, parser, inference engine and error checker. Additionally there are 2 modules which define the type system and the abstract syntax tree.
+
+    Notably this implementation (which was the first attempt at writing a type inference tool) does not create a typed syntax tree from the untyped one, instead folding over the tree, starting by inferring types from the leaf nodes, then building back up the tree and increasing the knowledge of the variables in the scope. While this implementation can still correctly identify type errors, it wasn't ideal, as is discussed ahead.
+
+    \subsection{Data Structures}
+      For the sake of simplicity, the initial OCaml implementation began just with support for numbers, strings, booleans and the 3 higher kinded types. The type schemes were defined as follows:
+
+      \begin{lstlisting}
+        type t =
+          | TNumber
+          | TString
+          | TArray of inferred_type
+          | TBoolean
+          | TObject of (string * inferred_type) list
+          | TFunction of (inferred_type list * inferred_type)
+          | TUndefined
+          | TNull
+        and inferred_type =
+          | T of JSTypeSet.t
+          | TofV of StringSet.t
+          | EUndeclared
+          | EConflict of JSTypeSet.t * JSTypeSet.t
+        and JSTypeSet : Set.S with type elt = JSType.t = Set.Make(JSType)
+        and StringSet : Set.S with type elt = String.t = Set.Make(String)
+        module SSMap = Map.Make(StringSet)
+
+        type scope = JSTypeSet.t SSMap.t
+      \end{lstlisting}
+
+      In English, a scope is a map of sets of variables which share a type, to the set of types that they share. In otherwords, our polymorphic add function would have a scope of:
+      \begin{math}
+        \{a, b\} \rightarrow T~\{\texttt{TNumber},~\texttt{TString}\}
+      \end{math}
+
+      The abstract syntax tree is defined using a recursively defined pair of types, one for statements and one for expressions, as well as two types created for convenience:
+
+      \begin{lstlisting}
+        type fname = string option
+        and block = statement list
+        and statement =
+          | Return of expr
+          | Declare of (string * expr option)
+          | Assign of (string * expr)
+          | While of (expr * block)
+          | If of (expr * block)
+          | IfElse of (expr * block * block)
+          | Expr of expr
+        and expr =
+          | Add of (expr * expr)
+          | Sub of (expr * expr)
+          | Mul of (expr * expr)
+          | Div of (expr * expr)
+          | Mod of (expr * expr)
+          | Lt of (expr * expr)
+          | LtEq of (expr * expr)
+          | Gt of (expr * expr)
+          | GtEq of (expr * expr)
+          | Eq of (expr * expr)
+          | True
+          | False
+          | Ident of string
+          | Number of int
+          | String of string
+          | Function of (fname * string list * block)
+          | Call of (string * expr list)
+          | Object of (expr * expr) list
+          | Property of (expr * expr)
+      \end{lstlisting}
+
+      In this AST structure, a program is simply a list of statements. These structures only represent a subset of JavaScript but are enough to form the basis of the language for the purposes of type inference - they can represent variables, functions, assignment and flow control, which are the core properties we should be able to infer. Other elements of the language (such as while loops or for loops) are simple to add once this subset can be handled correctly.
+
+    \subsection{Inference}
+      Knowing that programs are represented as a list of statements, the inference algorithm is implemented as a $fold$ which builds up a scope of types as it passes over each statement. When folding over expressions, the types for leaf nodes within the expression subtree are calculated first before being unified and returned. When folding over a statement, the effect the statement has on the scope is stored in the scope.
+
+      From this point, the program can give a summary of what the types of variables are within the program, including when there are no types that can satisfy the constraints on the variable. However, this is only part of the purpose of the program - it must also be able to infer the types of expressions, and further than that, report the positions within the source code of type errors.
+
+      To reach that point, a number of extensions to the software would have to be made.
+
+      One would be the extension of the parsing process to produce an Abstract Syntax tree containing the locations of each of the tokens present, so their locations can be given back to the user. Additionally, a second, typed AST would need to be constructed which would be able to store information about the types of every expression in the tree, and able to report type errors when they occurred.
+
+      The complexity of implementing that in OCaml is non-trivial, particularly in keeping track of the location of each input character through the tokenisation, parsing and inference stages. It quickly became clear that implementing these additional features in OCaml would come at a substantail time cost, and so the decision was made to switch to Scala which was known to have a more expressive type system.
+
+  \section{Scala}
+    Implementation in Scala began in ernest, using the test cases discussed in the testing section as a reference point, as these had already been constructed for OCaml. The first step of implementation was the creation of the typed and untyped AST structures discussed previously, as well as the structures representing the types inferred by the system.
+
+    Scala has a number of features which were particularly useful for the creation of these types. In particular these are case classes, a specific form of classes whose instances support pattern matching, and traits, which are similar to Java Inferfaces but also allow some implementation to be specified. Traits are Scala's main feature for the composition of properties and can be combined with the \texttt{sealed} keyword to indicate that a trait can only be used within one source file. This in turn means the compiler can give hints about when pattern matching against those classes might be inexhaustive.
+
+    \subsection{Untyped AST}
+      The AST structure makes heavy use of traits and cases classes, and some elements from every level of the AST are displayed here:
+      \begin{lstlisting}
+        case class Position(startLine: Int, startCol: Int, endLine: Int, endCol: Int)
+
+        trait Pos {
+          val pos: Position
+        }
+
+        sealed trait ASTNode extends Pos
+        case class Program(statements: Seq[Statement], pos: Position) extends Pos
+
+        sealed trait Statement extends ASTNode
+        case class If(cond: Expr, block: Seq[Statement], pos: Position) extends Statement
+
+        sealed trait Expr extends Statement
+
+        sealed trait Op extends Expr
+        case class Add(lhs: Expr, rhs: Expr, pos: Position) extends Op
+
+        sealed trait Value extends Expr
+
+        case class Ident(name: String, pos: Position) extends Value
+        case class LiteralStr(string: String, pos: Position) extends Value
+      \end{lstlisting}
+
+      We start by defining a \texttt{Position} case class, which is needed for the final stage of the process where we highlight type errors to the user. We additionally define a \texttt{Pos} trait, all extensions of which must carry a position. This is useful as we later guarantee through \texttt{ASTNode} that all nodes of the syntax tree must carry a position.
+
+      A \texttt{Program} is defined to simply be a list of statements, which also has a position. While that's not necessary for the purposes of the software, it's helpful from a development perspective to be able to check that the entirety of a program has been parsed in order to validate that the parser doesn't drop any input. More on the validation of the parser later.
+
+      A \texttt{Statement} is the most general case of a component of a program, representing both the untyped structures such as variable declarations and flow control statements, as well as being implemented by \texttt{Expr} to represent all of the typed components of a program.
+
+      The \texttt{Expr} trait has no classes which directly implement it, instead serving as a common type for operations - primitive \texttt{Value}s and more complex \texttt{Op}s, representing operations composed of other expressions.
+
+    \subsection{Parsing}
+      As was mentioned previously, the Scala implementation makes use of parser combinators to parse the source code of programs. While these look like standard grammar rules, there were a number of difficulties to overcome. One was a difficulty of parser combinators themselves - their inability to perform left recursion - while the others were a deficiency in the parser library implementation and also of the ambiguity of JavaScript for the purposes of tokenisation.
+
+      \subsubsection{Ambiguous Tokenisation}
+        One of the simpler but more frustrating problems during parser construction was the case of parsing JavaScript Regular Expressions correctly. JavaScript has a literal notation for regular expressions, such that anything between two \texttt{/} tokens could be considered a regular expression. This causes serious difficulty for parsers, as there is then ambiguity at the lexing stage as to whether \texttt{x/y/z} is ``(x) (divide) (y) (divide) (z)'', or ``x (regular expression) x''. Solving this issue was simple but came at a slight performance cost - removing the lexing stage from the pipeline so the parser combinators operate solely on the raw source of the input. While it would have a performance impact as the combinator backtracking process would now apply to whitespace as well as just tokens, performance is not the objective of this project and so the slight decrease in performance is an acceptable cost.
+
+      \subsubsection{Positional Information}
+        The most pressing feature of the parser to implement having moved from OCaml was to return positional information of the parsed source. Native parser combinators can return the location in source of the beginning of their parsed results, however don't by default expose the position at which the parsed input ends. This information is available within the implementation, however, and just needed to be exposed along with the result of parsing.
+
+         Implicit conversions are a Scala language feature that allow the programmer to define behaviour on some intermediate class, and separately define conversions from existing classes to that class. An implicit class is a specific example of this pattern which allows a programmer to define some method $m$ on a intermediate class $c$, in conjunction with some conversion from type $t\rightarrow c$. This means if a programmer calls the method $m$ on some value of type $t$, Scala will implicitly convert $t$ to $c$ using the implicit class provided by the programmer, if that class is in scope.
+
+        Implicit classes must be unique in their type signature and will cause a compilation error if 2 implicit functions or classes exist between the same types.
+
+        We use an \texttt{implicit class} to augment the behaviour of the standard parser combinator, so as to return a position in the input stream from which the result that has been parsed. It was implemented as follows:
+
+        \begin{lstlisting}
+          implicit class PositionedParser[T](parser: Parser[T]) {
+            def :>[U](p: ((T, Position)) => U): Parser[U] = Parser { in =>
+              parser(in) match {
+                case Success(t, in1) => Success(p(t, Position(in.pos.line,
+                                                              in.pos.column,
+                                                              in1.pos.line,
+                                                              in1.pos.column)
+                                                 ),
+                                                in1
+                                               )
+                case ns: NoSuccess => ns
+              }
+            }
+          }
+        \end{lstlisting}
+
+        The defined \texttt{:>} method simply wraps the parser, taking the position in the stream of both it's input and the remainder of the stream in it's output, and passes a \texttt{Position} constructed from those values to the function which handles it's result.
+
+      \subsubsection{Left Recursion}
+        Due to their reliance on backtracking, parser combinators are unable to parse grammars which include any left-recursive rules. This is intuitive when considering that a rule is evaluated by trying it's first component, then if it parses, continuing on to the next, or alternatively returning an error and attempting the next tree. A left recursive rule will continually call itself until a stack overflow is reached.
+
+        To prevent this happening, a general pattern of grammar structure is needed, which is a small deviation from the structure needed to maintain operator precedence. Assuming a small expression language language $e$:
+
+        \begin{flalign*}
+          e~::=~n~|~e+e~|e*e
+        \end{flalign*}
+
+        In which we need to maintain the operator precedence of keeping $*$ highest and $+$ lowest, we'd structure our Parser as below. Here the syntax \texttt{a \~ b} means compose the parsers \texttt{a} and \texttt{b} such that the result is a parser which matches \texttt{a} followed by \texttt{b} and returns a tuple of their results. \texttt{a \~> b} means compose the parsers in the same way as \texttt{\~} but only return the right hand result. The \texttt{?} operator means the parser is optional, and as such can match no input.
+
+        \begin{lstlisting}
+          def exp = mul
+          def mul = add ~ ("*" ~> mul)?
+          def add = num ~ ("+" ~> add)?
+          def num = numericLit
+        \end{lstlisting}
+
+        In this system, we avoid left recursion by beginning attempting to parse a high precedence operator, which in turn parses lower precendence operators followed by an optional recursive call to itself. In this way we make the parsers tail recursive, where (for example) if no multiplication operation is present the parser simply returns the result of the lower operators. However, if there is an operator present, it makes a recursive call to itself using the rest of the input to determine the right hand side.
+
+        We introduce an \texttt{implicit class} to our language to make working with the results of tail-recursive parsers easier:
+        \begin{lstlisting}
+          implicit class LeftRecursiveParser[U, T](parser: Parser[U ~ Option[T]]) {
+            def ::>(p: ((U, T, Position)) => U): Parser[U] = parser :> {
+              case (e ~ Some(e1), pos) => p((e, e1, pos))
+              case (e ~ None, pos) => e
+            }
+          }
+        \end{lstlisting}
+
+        This class allows us to call the \texttt{::>} method on any parser which parses a $U$ followed by an optional $T$. This method allows us to specify an operation to perform when an operator is parsed on the right hand side, and for the cases where no right hand side is parsed, simply return the result unmodified.
+
+        In other words, above, where we defined \texttt{mul = add \~~("*" \~\ > mul)?}, we can now define what we'd like to do with the result of that parser if it does parse a multiplication expression. Our function will run if the expression is parsed, or simply skipped (and the addition returned unchanged) if no expression is present.
+
+        A fuller example of our expression parser would look like this:
+        \begin{lstlisting}
+          def exp = mul
+          def mul = add ~ ("*" ~> mul)? ::> { case (lhs, rhs, pos) => Mul(lhs, rhs, pos)}
+          def add = num ~ ("+" ~> add)? ::> { case (lhs, rhs, pos) => Add(lhs, rhs, pos)}
+          def num = numericLit
+        \end{lstlisting}
+        This parses each level of the tree, and when operations are parsed, creates an AST node containing the subtrees and their respective positions in the raw input. 
+
+    \subsection{Inference}
+
+    \subsection{Feedback}
 
 \chapter{Testing}
-  Testing of the system is comprehensive, covering the system as a whole as well as individual subcomponents.
+  Testing of the system is comprehensive, covering the system as a whole with integration tests, and covering some of the formally defined components with fuzz testing.
 
   \section{Parser Testing}
 

@@ -196,8 +196,11 @@ Signed .........................................................................
 \addtolength{\headsep}{-\headheight} % See The LaTeX Companion, p 85
 \setlength{\footskip}{1cm}  % space between footer and bottom of body
 \setlength{\textwidth}{14cm} % width of the body of the text
-\setlength{\oddsidemargin}{2cm} % 2cm margin on the left for odd pages
-\setlength{\evensidemargin}{-1cm} % 2cm margin on the right for even pages
+\setlength{\oddsidemargin}{2.5cm} % 2cm margin on the left for odd pages
+\setlength{\evensidemargin}{-0.5cm} % 2cm margin on the right for even pages
+
+
+% Center align front page with \setlength{\oddsidemargin}{1cm}
 
 % 1.5 line spacing (ick!)
 \linespread{1.25}
