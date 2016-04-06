@@ -1,13 +1,17 @@
-\documentclass[british, twoside, openright]{bhamthesis}
+\documentclass[british, twoside]{bhamthesis}
 \title{Applying Static Type Checking to JavaScript}
 \author{Jack Wearden}
 \supervisor{Hayo Thielecke}
-\degree{BSc Computer Science}
+\degree{Bachelor of Science}
 \department{Computer Science}
 \date{April 2016}  %% Version 2009/12/26
 
 \usepackage{listings}
-\lstset{basicstyle=\ttfamily\scriptsize}
+\lstset{
+  basicstyle=\ttfamily\scriptsize,
+  breaklines=true,
+  postbreak=\raisebox{0ex}[0ex][0ex]{\ensuremath{\hookrightarrow\space}}
+}
 \usepackage{babel}
 \usepackage{csquotes}
 \usepackage{amsthm}
@@ -690,20 +694,279 @@
           def add = num ~ ("+" ~> add)? ::> { case (lhs, rhs, pos) => Add(lhs, rhs, pos)}
           def num = numericLit
         \end{lstlisting}
-        This parses each level of the tree, and when operations are parsed, creates an AST node containing the subtrees and their respective positions in the raw input. 
+        This parses each level of the tree, and when operations are parsed, creates an AST node containing the subtrees and their respective positions in the raw input.
 
-    \subsection{Inference}
+    \subsection{Data Structures}
+      Our Type System is defined using case classes for the higher-kinded types, and \texttt{case object}s for the primitives, which are essentially singleton instances of case classes. This obviously mirrors the fact that there is only one \texttt{TNumber} type, but several implementations of Objects, Functions, and Arrays do exist. A short extract of their definitions are as follows:
+      \begin{lstlisting}
+  sealed trait JsType
+  case object TNumber extends JsType
+  case object TRegExp extends JsType
+  case object TString extends JsType
+  case object TBoolean extends JsType
+  case object TUndefined extends JsType
+  case object TNull extends JsType
 
-    \subsection{Feedback}
+  case class TFunction(params: Seq[InferredType], result: InferredType) extends JsType {
+    def applyCall(ps: Seq[Expr])(implicit st: ScopeStack): InferredType
+  }
+
+  case class TObject(
+    override val properties: collection.mutable.Map[String, InferredType]
+  ) extends JsType
+
+  case class TArray(t: InferredType) extends JsType
+      \end{lstlisting}
+
+      This is somewhat simplified as there are additional methods defined on the higher kinded types beyond the method for function application on the TFunction class (the implementation is omitted here for brevity).
+
+      The type referenced in the higher kinded types, \texttt{InferredType}, is defined below:
+
+      \begin{lstlisting}
+  sealed trait InferredType {
+    def intersect(other: InferredType)(implicit st: ScopeStack): InferredType
+    def canSatisfy(other: InferredType)(implicit st: ScopeStack): Boolean
+    def applyCall(ps: Seq[Expr])(implicit st: ScopeStack): InferredType
+  }
+
+  sealed trait DirectType extends InferredType
+
+  case object AnyT extends InferredType with DirectType
+  case class ConstT(t: JsType) extends InferredType with DirectType
+  case class SetT(ts: Set[JsType]) extends InferredType with DirectType
+  case class IntersectT(vs: Int) extends InferredType
+
+  sealed trait TypeError extends InferredType with DirectType
+  case class NoInterErr(possibles: Set[InferredType]) extends TypeError
+  case class BadArgsErr(f: TFunction, e: Seq[InferredType]) extends TypeError
+  case class NotAProperty(obj: TObject, property: String) extends TypeError
+  case class NotAssignableErr(assignee: InferredType, value: InferredType) extends TypeError
+      \end{lstlisting}
+
+      It's worth enumerating the purpose and definition of each of these types. \texttt{AnyT} has 2 similar but subtly different meanings in different context, one when it's the type of a value, and one when it's the type of a parameter in a function.
+
+      As the type of a value, \texttt{AnyT} means the value could be any type, and we're unable to perform type checking on any activities that are achieved with it. It's not that the type is undefined, it's that it can not be defined statically (or at least, our tool isn't advanced enough to infer what's happening). In this case, if a method is called on it, or it's appended to an array, we should stick to our specification and trust the programmer's judgement.
+
+      When seen as the parameter type to a function, \texttt{AnyT} means a value of any type can be supplied to this function. In a Hindley Milner type system, the equivalent would be $\forall\alpha~\alpha$.
+
+      The type \texttt{ConstT} represents a type which is exactly known. This could be inferred from the type of a literal value, for example, where there is no doubt as to what the type might be. This is in contrast to \texttt{SetT} which represents a finite set of types which are valid for the expression.
+
+      We also have the trait \texttt{TypeError} which implements InferredType in order to allow expressions with Type Error to express that in their type.
+
+      The remaining class under the \texttt{InferredType} trait is the \texttt{IntersectT} trait. This is best understood in the context of \texttt{ScopeStack}, a class also referenced in the type signatures of some \texttt{InferredType} methods. An \texttt{IntersectT} can be thought of as a pointer to a type contained within a \texttt{ScopeStack}, which is used to keep track of the scopes of closures, their parameters and return types. It's this technique that allows us to link the dependency between parameter types; our overloaded add function has the type \texttt{ConstT(Function<[IntersectT( n), IntersectT(n)], IntersectT(n))} where \texttt{n} is defined within the \texttt{ScopeStack} as having the type \texttt{SetT(TNumber, TString)}.
+
+      This is a small deviation from our original plan of assigning the type \texttt{SetT(Function< [TNumber, TNumber], TNumber>, Function<[TString, TString], TString)} - however this new approach is functionally identical (there's no expression that could be expressed in the \texttt{Set} design that can't be expressed with the \texttt{IntersectT} design) and we additionally gain clarity from separating the logic of which variables share types, and what those types are.
+
+      The only remaining data structure to discuss is the Typed syntax tree. This is almost identical to the untyped syntax tree but with two small exceptions, visible from the extracts of type definitions:
+      \begin{lstlisting}
+  type TypeLines = Seq[(Position, InferredType)]
+  sealed trait ASTNode extends Pos {
+    def typeAnnotations(m: Map[Int, TypeLines]): Map[Int, TypeLines]
+  }
+  sealed trait Expr extends Statement {
+    val t: InferredType
+  }
+  case class LiteralStr(
+    string: String,
+    pos: Position,
+    t: InferredType = ConstT(TString)
+  ) extends Value
+      \end{lstlisting}
+
+      The definition of the \texttt{typeAnnotations} method on our AST Node class is useful for the output of the program. It is defined so that at the end of the process, when annotating type errors, the program can retrieve from each node a list of line numbers in the source code, and from each one get a list of the positions of expressions, and the types of those expressions. At the end of the program's execution, this map is calculated for the entire tree to allow looping through each line and annotating every expression on that line with its type.
+
+      Additionally, the definition of the \texttt{t} property on expression nodes. This is present for all values and operations, and is populated with the type calculated by the type inference algorithm.
+
+      And finally, we save complexity elsewhere in the process by defining the types of primitive types in their case class definition, as seen when we assign all literal string nodes the default type of \texttt{ConstT(TString)}.
+
+      \subsection{Inference Algorithm}
+
+      The process of turning an untyped abstract syntax tree into a typed one is based from defining specific conversions for each kind of node between it's typed and untyped one. In the case of primitives, these are simple:
+
+      \begin{lstlisting}
+        case AST.LiteralStr(s, pos) => ASTf.LiteralStr(s, pos)
+      \end{lstlisting}
+
+      Recall that the typed form of primitive node definitions have their type included in the definition, so no type declaration has to happen for these simple cases.
+
+      For the more complex ones, we simply take the types of subtrees, and use their intersection as the type:
+
+      \begin{lstlisting}
+        case AST.Add(lhs, rhs, pos) => add(lhs, rhs, pos)
+      \end{lstlisting}
+
+      where our utility add method is defined as follows:
+
+      \begin{lstlisting}
+        def add(lhs: Expr, rhs: Expr, pos: Position)(implicit st: ScopeStack) =
+            Add(lhs, rhs, pos, lhs.t intersect rhs.t intersect SetT(Set(TNumber, TString)))
+      \end{lstlisting}
+
+      This is a slight simplification of this method implementation; another helper method is involved which provides more generalised inference for binary operations, but this is the constructed value none the less.
+
+      In this way, our inference algorithm works by starting at the bottom of the tree and unifying types as it returns too the root, in accordance with the unification rules we laid out in the design section.
+
+      An extract of the implementation of those rules in Scala:
+
+      \begin{lstlisting}
+def intersect(other: InferredType)(implicit st: ScopeStack): InferredType = {
+  this match {
+    case AnyT           => other
+    case t: TypeError   => this
+    case ConstT(t)      => other match {
+      case ConstT(u)    => (t, u) match {
+                             case (t1: TObject, t2: TObject) => t1 intersect t2
+                             case _ if t == u => ConstT(t)
+                             case _ => NoInterErr(Set(ConstT(t), ConstT(u)))
+                           }
+
+      case SetT(ts)       =>  if (ts contains t)         ConstT(t) else NoInterErr(Set(SetT(ts), ConstT(t)))
+      case IntersectT(i)  =>  if ((this canSatisfy other) || (other canSatisfy this)) {
+                                st.filterGroupType(GroupID(i), ConstT(t))
+                              } else {
+                                NoInterErr(Set(ConstT(t), st.getGroupType(GroupID(i))))
+                              }
+      case _              => other intersect this
+    }
+    case SetT(ts)       => other match {
+      case SetT(us)       => if ((ts intersect us).nonEmpty) { SetT(ts intersect us) } else { NoInterErr(Set(SetT(ts), SetT(us)))}
+      case IntersectT(i)  => st.filterGroupType(GroupID(i), SetT(ts)); other
+      case _              => other intersect this
+    }
+    case IntersectT(i)  => other match {
+      case IntersectT(v)  => IntersectT(st.mergeGroupTypes(Set(GroupID(i), GroupID(v))).id)
+      case _              => other intersect this
+    }
+  }
+}
+      \end{lstlisting}
+
+      In the our testing section we go on to prove that this intersection strategy is in line with the rules we defined in our design section using ScalaCheck, a property based testing library for Scala.
+
+      \subsection{Feedback}
+
+      For our system to be of any practical use, it needs to give meaningful feedback to developers about the nature of type errors detected within their programs. The primary approach to this, the \texttt{typeAnnotations} method defined on each tree node is the primary method for retrieving the type information to be displayed on screen. The method for printing this information on screen is pleasantly simple:
+
+      \begin{lstlisting}
+      def annotateSource(source: Seq[String]): String = {
+        source.zipWithIndex.flatMap({
+          case (line, idx) => typeAnnotations(idx + 1).flatMap {
+            case (pos, t) => Seq(line, pos.underline, pos.paddedPrefix(t.serialize(stack)) + "\n")
+          }
+        }).mkString("\n")
+      }
+      \end{lstlisting}
+
+      We zip every line of the input program together with it's index (which is line number - 1), find every type annotation for that line and the position which it covers, and re-print the input line with the expression underlined, and its type printed beneath it. Some sample IO (here executed with the verbose flag to show all types annotated, for the sake of demonstration).
+
+      \begin{lstlisting}
+      > var box = { width: 5, height: 5 };
+      > var area = function(w, h) { return w * h };
+      > console.log(area(box.width, box.height));
+
+      var box = { width: 5, height: 5 };
+                                    ^^
+                                    Number
+
+      var box = { width: 5, height: 5 };
+                         ^
+                         Number
+
+      var box = { width: 5, height: 5 };
+                ^^^^^^^^^^^^^^^^^^^^^^^
+                Object { height: Number, width: Number }
+
+      var area = function(w, h) { return w * h };
+                                             ^^
+                                             Number
+
+      var area = function(w, h) { return w * h };
+                                         ^^
+                                         Number
+
+      var area = function(w, h) { return w * h };
+                                         ^^^^^^
+                                         Number
+
+      var area = function(w, h) { return w * h };
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                 Function (Number, Number) -> Number
+
+      console.log(area(box.width, box.height));
+                                  ^^^^^^^^^^
+                                  Number
+
+      console.log(area(box.width, box.height));
+                       ^^^^^^^^^
+                       Number
+
+      console.log(area(box.width, box.height));
+                  ^^^^
+                  Function (Number, Number) -> Number
+
+      console.log(area(box.width, box.height));
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                  Number
+
+      console.log(area(box.width, box.height));
+      ^^^^^^^^^^^
+      Function (Any) -> Undefined
+
+      console.log(area(box.width, box.height));
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      Undefined
+
+      No type errors found
+      \end{lstlisting}
+
+      And here's how our function parses and presents type errors found within a type-incorrect program (here running without the verbose flag):
+
+      \begin{lstlisting}
+        > var add = function(a, b) { return a + b };
+        > add(1, 2);
+        > add("a", "b");
+        > add(1, "b");
+
+
+      \end{lstlisting}
+
+      Also note that the errors are reported to the Standard Error stream, and the system exits with a non-zero exit code when an error occurs. Using a standard interface like this one to report errors rather than reporting errors through some specific or ad-hoc format makes it easier to integrate the tool into existing build processes.
 
 \chapter{Testing}
   Testing of the system is comprehensive, covering the system as a whole with integration tests, and covering some of the formally defined components with fuzz testing.
 
+  \section{Test Driven Development}
+    As was mentioned in the implementation section, TDD was used heavily to drive the development process. This process became especially useful after the move from OCaml to Scala, where it was necessary to ensure that no regressions had been introduced into the code. Over time test cases were introduced like these:
+
+    \begin{lstlisting}
+      Seq(
+        true  -> "1+2+3+4;",
+        true  -> "var a = true; a = false",
+        true  -> "2*2*3/4+10;",
+        true  -> "100;",
+        true  -> "'hello ' + 'world';",
+      ...
+    \end{lstlisting}
+
+    Noting that \texttt{->} is Scala syntactic sugar for a tuple, these cases represent whether a test should type check correctly tupled with the source code of the test case.
+
+    The simple cases above test individual features of the type system, but go on to test several in composition together:
+
+    \begin{lstlisting}
+  false -> "var x = [{name: 'Jack', age: 22}, {make: 'Citroen C1', age: 6}]; var i = 0; while (x.length < i++) { console.log(x[i].name); }"
+    \end{lstlisting}
+
+    The use of these tests ensured that as development progressed to add more features to the system, there were never any regressions introduced.
+
   \section{Parser Testing}
+    Testing the completeness of the parser was undertaken to ensure that it would correctly be able to parse all valid JavaScript programs, even if it could not perform type inference on them
+
+    The ideal situation for testing would have been some flavour of property-based testing or fuzz testing as was used for testing the Unification system, which is described ahead. However the use of parser combinators blurs the line between the idea of a grammar and a parser, and as such fuzz testing becomes non trivial.
+
+    Instead, testing was performed by finding substantially large open source JavaScript libraries and using them as inputs to the program.
 
   \section{Type System}
     \subsection{Inference}
-
     \subsection{Unification}
 
 \chapter{Evaluation}
