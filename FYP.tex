@@ -139,7 +139,7 @@
 
     As such, any program which looped through that array while operating on the \texttt {bar} property would cause problems at runtime during the cases where it's undefined, and these problems would not be caught at compile time.
 
-    Another problematic case is of function inference. TypeScript will never infer any type signatures of functions beyond giving them a default parameter type of \texttt{any}. This means most of the code that developers write will gain no benefit from begin run through TypeScript, and to actually gain any type safety, developers would have to annotate function parameters as required by TypeScript, which would break compatability with the JavaScript syntax.
+    Another problematic case is of function inference. TypeScript will never infer any type signatures of functions beyond giving them a default parameter type of \texttt{any}. This means most of the code that developers write will gain no benefit from begin run through TypeScript, and to actually gain any type safety, developers would have to annotate function parameters as required by TypeScript, which would break compatibility with the JavaScript syntax.
 
     These cases highlight a general pattern in which reaping the benefits of the type safety which TypeScript provides requires you to invest fully in its own language, which is a jump existing software may not be able to make.
 
@@ -150,7 +150,7 @@
 
     One example of where Flow's use of union types causes false negatives to be given can be seen in the inference of expressions and structures which involve, among other language features, the overloaded + operator. This operator is a problematic addition to the language which readers will see regularly used as a yard stick for testing the quality of a type checking implementation. As will be mentioned in the design phase, + is valid for Numbers and Strings, but causes type coercion when adding a value of one type to a value of the other. Flow infers the types of expressions involved in a + operation as being \texttt{number | string}, and as such provides no security against \texttt{2 + "3"} as both sides of the expression satisfy the type constraint. It is a design shortcoming of Flow which means that union types cannot represent the idea that two values could be either Number or String, but must be the same type.
 
-    Additionally it encourages changing the source code of programs to add type annotations either in function and variable definitions (making it incompatable with standard javascript) or in comments around those structures (which can easily become outdated and incorrect if a function is refactored without updating the comments).
+    Additionally it encourages changing the source code of programs to add type annotations either in function and variable definitions (making it incompatible with standard javascript) or in comments around those structures (which can easily become outdated and incorrect if a function is refactored without updating the comments).
 
     Most frustratingly, though, it's complicated to run and configure for a JavaScript project. It requires complex configuration files to be created, and each source file must be updated with an initial comment indicating it should be checked by flow, otherwise it would be skipped by default.
 
@@ -176,12 +176,15 @@
     \item The software should be executable as a command-line program so as to be easy to embed in existing build tools or task runner configurations.
     \item The program should accept a single JavaScript program for type checking, either from standard input or from a file.
     \item Even if type inference on some program structures is not possible, the source of a program should be accepted in its totality and only the inferable elements type checked.
+    \item There should be no requirement that programs to be checked have any kind of type annotation, either in variable or function declaration syntax or in comments.
+    \item As the software is designed to function as part of a build pipeline, it will likely be preceded by linters and as such should not implement any functionality to detect and describe syntax errors. All input can be assumed to be valid JavaScript.
   \end{itemize}
 
   \subsubsection{Process}
   \begin{itemize}
     \item The input source file should be parsed and undergo type checking.
-    \item While type errors of all kinds should be detected where possible, type errors occuring through implicit coercion or the attempted calling of non-functions, should be specifically detected as they lead to undesired behaviour and halted execution.
+    \item While type errors of all kinds should be detected where possible, type errors occurring through implicit coercion or the attempted calling of non-functions, should be specifically detected as they lead to undesired behaviour and halted execution.
+    \item When type errors are found they should contain enough context to give a description of the cause of the problem, in conjunction with the location at which it occurred.
   \end{itemize}
 
   \subsubsection{Output}
@@ -267,7 +270,7 @@
     Special consideration should be given to how to represent functions, and whether calls which supply a different number of parameters should be considered type-correct at all.
 
   \subsection{Operator Overloading}
-    One significant cause of confusion in JavaScript is the overloading of the $+$ operator for Strings and Numbers. While working with strings, it serves as a method of concatenation, and with numbers, it carries out addition. While this doesn't outright cause any errors in consistency, it does lead to cases where an inferred type can be ambigious. The simplest case highlighting this ambiguity is an addition function - \texttt {function (a, b) \{ return a + b \}}.
+    One significant cause of confusion in JavaScript is the overloading of the $+$ operator for Strings and Numbers. While working with strings, it serves as a method of concatenation, and with numbers, it carries out addition. While this doesn't outright cause any errors in consistency, it does lead to cases where an inferred type can be ambiguous. The simplest case highlighting this ambiguity is an addition function - \texttt {function (a, b) \{ return a + b \}}.
 
     Different languages handle this in different ways. In ML and derivatives, the problem is entirely avoided as + is defined for Numbers alone. In Haskell, the function would have the type \texttt {Num a => a -> a -> a} - that is, the function is polymorphic over type \texttt{a}, so long as \texttt{a} implements the behaviour of the \texttt{Num} typeclass.
 
@@ -318,7 +321,7 @@
 
   \section{Approach}
 
-    Based off the existing research already mentioned there are 2 potential approaches to performing type inference upon which we could build our work. One would be to make direct use of the work acheived in Gradual Typing for Functional Languages\autocite{Siek2006} by reducing JavaScript programs down to a gradually typed lamda calculus, and performing the type checking on that lambda calculus. The other would be to perform type checking closer to that described in  Hindley \& Milner's work, by inferring types directly from the structure of a program using a formalised type system. Neither of these approaches are 1:1 implementable, and each approach has its own challenges.
+    Based off the existing research already mentioned there are 2 potential approaches to performing type inference upon which we could build our work. One would be to make direct use of the work achieved in Gradual Typing for Functional Languages\autocite{Siek2006} by reducing JavaScript programs down to a gradually typed lambda calculus, and performing the type checking on that lambda calculus. The other would be to perform type checking closer to that described in  Hindley \& Milner's work, by inferring types directly from the structure of a program using a formalised type system. Neither of these approaches are 1:1 implementable, and each approach has its own challenges.
 
   \subsection{Gradually Typed Lambda Calculus}
 
@@ -331,7 +334,7 @@
 
     Though Hindley-Milner Type Inference is primarily used in statically typed languages, (and strictly functional ones too), it has a number of general-purpose strategies for type checking. One is the distinction between the type system and the algorithm for checking types, and another is the mapping of type inference onto the language's syntactic structure.
 
-    Some of the simpler HM rules are directly transferrable. In particular, the rule for variable type is usable\footnote{In this notation, $A$ represents an enviroment of assumptions, $e$ represents expressions, $x$ represents variables and $\sigma$ represents type schemes. Additionally, $A_x$ means an environment with no assumptions about $x$, and a type scheme is defined as $\sigma = \tau | \forall\alpha\mspace{3mu}\tau$}:
+    Some of the simpler HM rules are directly transferrable. In particular, the rule for variable type is usable\footnote{In this notation, $A$ represents an environment of assumptions, $e$ represents expressions, $x$ represents variables and $\sigma$ represents type schemes. Additionally, $A_x$ means an environment with no assumptions about $x$, and a type scheme is defined as $\sigma = \tau | \forall\alpha\mspace{3mu}\tau$}:
 
     \begin{flalign*}
       &&\Cen{3}{
@@ -487,18 +490,18 @@
       \{\sigma_1,..\sigma_n\}&\cap~\sigma_n~&=&~\sigma_n\\
     \end{flalign*}
 
-    In words, this system determines the unification of two types to be the most general type that can satisfy the constraints of both input types. For ground types ($\gamma$) that is either the ground type itself when unifying the same ground type from 2 expressions, or a Type Error. For Objects, it's the intersection of the properties of both objects. Similarly for arrays, it's the intersection of the types each array is composed of. For Functions, each of the required parameter types are intersected, along with the return types. Any type errors occuring within either parameter intersections or return type intersection would mean this this intersection also evaluates to a type error.
+    In words, this system determines the unification of two types to be the most general type that can satisfy the constraints of both input types. For ground types ($\gamma$) that is either the ground type itself when unifying the same ground type from 2 expressions, or a Type Error. For Objects, it's the intersection of the properties of both objects. Similarly for arrays, it's the intersection of the types each array is composed of. For Functions, each of the required parameter types are intersected, along with the return types. Any type errors occurring within either parameter intersections or return type intersection would mean this this intersection also evaluates to a type error.
 
     The intersection of $Any$ with any other property simply returns the other property being unified, as it's always at least as specific as $Any$ (the case where it's the same specificity is $Any \cap Any$).
 
-    And the intersection between a set of types and a constant type occuring within that set is the constant type, as it's the most general type that can satisfy both sides.
+    And the intersection between a set of types and a constant type occurring within that set is the constant type, as it's the most general type that can satisfy both sides.
 
   \section{Software Structure}
     The software architecture for this project will align quite closely with the common understanding of compilers.
 
     An initial parsing phase will produce an untyped Abstract Syntax Tree. As no type checking or inference will have been performed at this stage, the only information contained within this structure (besides the representation of the program) is the position within the raw source at which each element of the tree occurs. This is necessary to ensure that when a type error is detected, we can give the user a specific reference to where it is within the source.
 
-    The major phase of the software's execution is to take the untyped abstract syntax tree and convert it into a typed abstract syntax tree. This new tree will be structured identically to the untyped tree, but will carry extra information about the types (and potentially type errors) of the statements and expressions at each level. The converison process is a simple tree-traversal algorithm, in which any subtrees undergo type inference first, followed by unification by the rules defined in the previous section. In the case of rules relating to variables and scope, data about the types of variables is kept in an environment variable, which is simply a map of variables to their types (ensuring of course that identically named variables in different scopes don't affect each other).
+    The major phase of the software's execution is to take the untyped abstract syntax tree and convert it into a typed abstract syntax tree. This new tree will be structured identically to the untyped tree, but will carry extra information about the types (and potentially type errors) of the statements and expressions at each level. The conversion process is a simple tree-traversal algorithm, in which any subtrees undergo type inference first, followed by unification by the rules defined in the previous section. In the case of rules relating to variables and scope, data about the types of variables is kept in an environment variable, which is simply a map of variables to their types (ensuring of course that identically named variables in different scopes don't affect each other).
 
     Finally this typed tree will undergo error checking, looking for the locations within the tree where type errors occur which can be fed back to the user along with the tool's understanding of the error.
 
@@ -548,7 +551,7 @@
         type scope = JSTypeSet.t SSMap.t
       \end{lstlisting}
 
-      In English, a scope is a map of sets of variables which share a type, to the set of types that they share. In otherwords, our polymorphic add function would have a scope of:
+      In English, a scope is a map of sets of variables which share a type, to the set of types that they share. In other words, our polymorphic add function would have a scope of:
       \begin{math}
         \{a, b\} \rightarrow T~\{\texttt{TNumber},~\texttt{TString}\}
       \end{math}
@@ -599,12 +602,12 @@
 
       One would be the extension of the parsing process to produce an Abstract Syntax tree containing the locations of each of the tokens present, so their locations can be given back to the user. Additionally, a second, typed AST would need to be constructed which would be able to store information about the types of every expression in the tree, and able to report type errors when they occurred.
 
-      The complexity of implementing that in OCaml is non-trivial, particularly in keeping track of the location of each input character through the tokenisation, parsing and inference stages. It quickly became clear that implementing these additional features in OCaml would come at a substantail time cost, and so the decision was made to switch to Scala which was known to have a more expressive type system.
+      The complexity of implementing that in OCaml is non-trivial, particularly in keeping track of the location of each input character through the tokenisation, parsing and inference stages. It quickly became clear that implementing these additional features in OCaml would come at a substantial time cost, and so the decision was made to switch to Scala which was known to have a more expressive type system.
 
   \section{Scala}
     Implementation in Scala began in ernest, using the test cases discussed in the testing section as a reference point, as these had already been constructed for OCaml. The first step of implementation was the creation of the typed and untyped AST structures discussed previously, as well as the structures representing inferred types.
 
-    Scala has a number of features which were particularly useful for the creation of these types. In particular these are case classes, a specific form of classes whose instances support pattern matching, and traits, which are similar to Java Inferfaces but also allow some implementation to be specified. Traits are Scala's main feature for the composition of properties and can be combined with the \texttt{sealed} keyword to indicate that a trait can only be used within one source file. This in turn means the compiler can give hints about when pattern matching against case classes might be inexhaustive.
+    Scala has a number of features which were particularly useful for the creation of these types. In particular these are case classes, a specific form of classes whose instances support pattern matching, and traits, which are similar to Java Interfaces but also allow some implementation to be specified. Traits are Scala's main feature for the composition of properties and can be combined with the \texttt{sealed} keyword to indicate that a trait can only be used within one source file. This in turn means the compiler can give hints about when pattern matching against case classes might be inexhaustive.
 
     \subsection{Untyped AST}
       The AST structure makes heavy use of traits and cases classes, and some elements from every level of the AST are displayed here:
@@ -1030,7 +1033,7 @@ def intersect(other: InferredType)(implicit st: ScopeStack): InferredType = {
         > add(1, 2);
         > add("a", "b");
         > add(1, "b");
-        
+
         run with -v for full parse tree
 
         add(1, "b");
@@ -1076,7 +1079,7 @@ def intersect(other: InferredType)(implicit st: ScopeStack): InferredType = {
     The libraries used were Underscore.js, a functional programming so-called ``toolbelt'' library of just over 1600 lines of idiomatic JavaScript. It was used as a tool for checking that every common language feature had been implemented within the parser, and that the AST was capable of representing common language features.
 
   \section{Type System}
-    Besides the unit test cases, a large part of the testing of the system was performed through property-based tests. The principle behind Property-Based testing\autocite{Fink1997} is that based on abitrary inputs and test cases, certain properties can be expected to hold. These properties are expressed in individual test functions, and using these functions the test suite then generates an arbitrary number and complexity of inputs and attempts to invalidate the property.
+    Besides the unit test cases, a large part of the testing of the system was performed through property-based tests. The principle behind Property-Based testing\autocite{Fink1997} is that based on arbitrary inputs and test cases, certain properties can be expected to hold. These properties are expressed in individual test functions, and using these functions the test suite then generates an arbitrary number and complexity of inputs and attempts to invalidate the property.
 
     \subsection{Inference}
 
@@ -1248,7 +1251,7 @@ property("Computed Member") = forAll { (prop: IdentName) =>
   }
     \end{lstlisting}
 
-      To perform this we take one set of properties for each object, and one property which will be common between the objects. We then interesct the two types, ensuring that the interesction is an object with a non-empty set of properties, and that the common property is present.
+      To perform this we take one set of properties for each object, and one property which will be common between the objects. We then intersect the two types, ensuring that the intersection is an object with a non-empty set of properties, and that the common property is present.
 
       Next is array intersection:
       \begin{lstlisting}
@@ -1303,7 +1306,11 @@ property("Function Intersection") = forAll { (f1: TFunction, f2: TFunction) =>
       And finally we ensure that when a constant and a set are intersected, that the result a constant, when the constant is present in the set, or a type error otherwise.
 
 \chapter{Evaluation}
+
+
 \chapter{Conclusion}
+
+  In summary, the program constructed at the end of this project is capable of performing type checking on JavaScript programs without the need for any new syntax for type annotation. This, in conjunction with the use of standard command-line interface patterns such as the use of the standard error stream and exit codes that vary depending on the detection of errors, means the project is usable today by real-world developers without the need to alter or prepare the project in any way. While type checking is not exhaustive, and there is still potential for type errors in programs checked by this tool, that potential is substantially mitigated in compared to both plain, unchecked JavaScript code, and also compared to the capabilities of existing type checking tools such as Flow.
 
 \printbibliography
 
