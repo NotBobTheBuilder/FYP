@@ -422,29 +422,19 @@
       \frac{A_x \vdash e:\tau\mspace{20mu} \texttt{var}~x~=~e}{A\vdash x: \tau}
       \\\\
       \textsc{declare:}&\mspace{20mu}
-      \frac{A_x \vdash \texttt{var}~x}{A\vdash x: Undefined}
-      \\\\
-      \textsc{assign:}&\mspace{20mu}
-      \frac{A \vdash (x:\sigma \vee x:Undefined)\mspace{20mu} e: \sigma' \mspace{20mu}x~=~e}{A\vdash x: \sigma'}
-      \mspace{20mu}
-      (\sigma'\leqslant\sigma)
+      \frac{A_x \vdash \texttt{var}~x}{A\vdash x: Any}
       \\\\
       \textsc{property:}&\mspace{20mu}
       \frac{A \vdash e:Object<y:\tau>}{A\vdash e\texttt{.}y:\tau}
       \\\\
-      \textsc{element:}&\mspace{20mu}
+      \textsc{array element:}&\mspace{20mu}
       \frac{A \vdash e:Array<\tau>\mspace{20mu} e':Number}{A\vdash e\texttt{[}e'\texttt{]}:\tau}
       \\\\
-      \textsc{member:}&\mspace{20mu}
-      \frac{A \vdash e:Object<e':\tau>\mspace{20mu} e':String}{A\vdash e\texttt{[}e'\texttt{]}:\tau}
-      \\\\
-      \textsc{non member:}&\mspace{20mu}
+      \textsc{computed member:}&\mspace{20mu}
       \frac{A \vdash e:Object<ps>\mspace{20mu} e':String}{A\vdash e\texttt{[}e'\texttt{]}:Any}
-      \mspace{20mu}
-      (e' \notin ps)
     \end{flalign*}
 
-    The underlying difference between these rules and the rules formulated by Hindley \& Milner is recognisable in the \textsc{define}, \textsc{declare} and \textsc{assign} rules. These are statements which have no type of their own, but help us infer the type of other expressions within a program. Such a concept - of a ``bare statement'' - does not exist in purely functional languages, and as such, when one appears in JavaScript code we use it as part of the premise of a deduction rather than the conclusion.
+    The underlying difference between these rules and the rules formulated by Hindley \& Milner is recognisable in the \textsc{define} and \textsc{declare} rules. These are statements which have no type of their own, but help us infer the type of other expressions within a program. Such a concept - of a ``bare statement'' - does not exist in purely functional languages, and as such, when one appears in JavaScript code we use it as part of the premise of a deduction rather than the conclusion.
 
     \subsection{Unification Rules}
 
@@ -460,13 +450,7 @@
       \{\sigma_1,..\sigma_n\}&\cap~\sigma_n~&=&~\sigma_n\\
     \end{flalign*}
 
-    In words, this system determines the unification of two types to be the most general type that can satisfy the constraints of both input types.
-
-    For ground types ($\gamma$) that is either the ground type itself when unifying the same ground type from 2 expressions, or a Type Error.
-
-    For Objects, it's the intersection of the properties of both objects. Similarly for arrays, it's the intersection of the types each array is composed of.
-
-    For Functions, each of the required parameter types are intersected, along with the return types. Any type errors occuring within either parameter intersections or return type intersection would mean this this intersection also evaluates to a type error.
+    In words, this system determines the unification of two types to be the most general type that can satisfy the constraints of both input types. For ground types ($\gamma$) that is either the ground type itself when unifying the same ground type from 2 expressions, or a Type Error. For Objects, it's the intersection of the properties of both objects. Similarly for arrays, it's the intersection of the types each array is composed of. For Functions, each of the required parameter types are intersected, along with the return types. Any type errors occuring within either parameter intersections or return type intersection would mean this this intersection also evaluates to a type error.
 
     The intersection of $Any$ with any other property simply returns the other property being unified, as it's always at least as specific as any (the case where it's the same specificity is $Any \cap Any$).
 
@@ -623,7 +607,15 @@
       As was mentioned previously, the Scala implementation makes use of parser combinators to parse the source code of programs. While these look like standard grammar rules, there were a number of difficulties to overcome. One was a difficulty of parser combinators themselves - their inability to perform left recursion - while the others were a deficiency in the parser library implementation and also of the ambiguity of JavaScript for the purposes of tokenisation.
 
       \subsubsection{Ambiguous Tokenisation}
-        One of the simpler but more frustrating problems during parser construction was the case of parsing JavaScript Regular Expressions correctly. JavaScript has a literal notation for regular expressions, such that anything between two \texttt{/} tokens could be considered a regular expression. This causes serious difficulty for parsers, as there is then ambiguity at the lexing stage as to whether \texttt{x/y/z} is ``(x) (divide) (y) (divide) (z)'', or ``x (regular expression) x''. Solving this issue was simple but came at a slight performance cost - removing the lexing stage from the pipeline so the parser combinators operate solely on the raw source of the input. While it would have a performance impact as the combinator backtracking process would now apply to whitespace as well as just tokens, performance is not the objective of this project and so the slight decrease in performance is an acceptable cost.
+        One of the simpler but more frustrating problems during parser construction was the case of parsing JavaScript Regular Expressions correctly. JavaScript has a literal notation for regular expressions, such that anything between two \texttt{/} tokens could be considered a regular expression. This causes serious difficulty for parsers, as there is then ambiguity at the lexing stage as to whether \texttt{x/y/z} is ``(x) (divide) (y) (divide) (z)'', or ``x (regular expression) x''. A real-world example of this can be seen in the Underscore.js library which was used for testing purposes, discussed ahead. In this library, the following line exists:
+
+        \begin{lstlisting}
+          var rootStripper = /^\/+|\/+$/g
+        \end{lstlisting}
+
+        Tokenising this structure is extremely difficult, as the mixture of plus and divide symbols could represent an expression, and this is made more ambiguous because \$ and g are both valid identifier names.
+
+        Solving this issue was simple but came at a slight performance cost - removing the lexing stage from the pipeline so the parser combinators operate solely on the raw source of the input. While it would have a performance impact as the combinator backtracking process would now apply to whitespace as well as just tokens, performance is not the objective of this project and so the slight decrease in performance is an acceptable cost.
 
       \subsubsection{Positional Information}
         The most pressing feature of the parser to implement having moved from OCaml was to return positional information of the parsed source. Native parser combinators can return the location in source of the beginning of their parsed results, however don't by default expose the position at which the parsed input ends. This information is available within the implementation, however, and just needed to be exposed along with the result of parsing.
@@ -933,7 +925,7 @@ def intersect(other: InferredType)(implicit st: ScopeStack): InferredType = {
       Also note that the errors are reported to the Standard Error stream, and the system exits with a non-zero exit code when an error occurs. Using a standard interface like this one to report errors rather than reporting errors through some specific or ad-hoc format makes it easier to integrate the tool into existing build processes.
 
 \chapter{Testing}
-  Testing of the system is comprehensive, covering the system as a whole with integration tests, and covering some of the formally defined components with fuzz testing.
+  Testing of the system is comprehensive, covering the system as a whole with integration tests, and covering some of the formally defined components with property-based testing.
 
   \section{Test Driven Development}
     As was mentioned in the implementation section, TDD was used heavily to drive the development process. This process became especially useful after the move from OCaml to Scala, where it was necessary to ensure that no regressions had been introduced into the code. Over time test cases were introduced like these:
@@ -961,13 +953,238 @@ def intersect(other: InferredType)(implicit st: ScopeStack): InferredType = {
   \section{Parser Testing}
     Testing the completeness of the parser was undertaken to ensure that it would correctly be able to parse all valid JavaScript programs, even if it could not perform type inference on them
 
-    The ideal situation for testing would have been some flavour of property-based testing or fuzz testing as was used for testing the Unification system, which is described ahead. However the use of parser combinators blurs the line between the idea of a grammar and a parser, and as such fuzz testing becomes non trivial.
+    The ideal situation for testing would have been some flavour of property-based testing as was used for testing the Unification system, which is described ahead. However the use of parser combinators blurs the line between the idea of a grammar and a parser, and as such testing ASTs becomes non trivial.
 
     Instead, testing was performed by finding substantially large open source JavaScript libraries and using them as inputs to the program.
 
+    The libraries used were Underscore.js, a functional programming so-called ``toolbelt'' library of just over 1600 lines of idiomatic JavaScript. It was used as a tool for checking that every common language feature had been implemented within the parser, and that the AST was capable of representing common language features.
+
   \section{Type System}
+    Besides the unit test cases, a large part of the testing of the system was performed through property-based tests. The principle behind Property-Based testing\autocite{Fink1997} is that based on abitrary inputs and test cases, certain properties can be expected to hold. These properties are expressed in individual test functions, and using these functions the test suite then generates an arbitrary number and complexity of inputs and attempts to invalidate the property.
+
     \subsection{Inference}
+
+      Here again are the type system rules taken from the design section:
+
+      \begin{flalign*}
+        \textsc{variable:}&\mspace{20mu}
+        \frac{}{A\vdash x\hmcolon\sigma}
+        \mspace{20mu}
+        (x\hmcolon\sigma\in A)
+        \\\\
+        \textsc{function:}&\mspace{20mu}
+        \frac{A_{x_{0..n}}\cup \{ x_0:t_0, x_n:t_n \} \vdash e:\tau'}{A\vdash \texttt{function}(x_0:\tau_0,.. x_n:\tau_n)\{ \texttt{return}~e:\tau'\}: Function<\tau_{0..n}, \tau'>}
+        \\\\
+        \textsc{call:}&\mspace{20mu}
+        \frac{A \vdash e':Function<\sigma_{0..n}, \sigma'>\mspace{20mu} A\vdash \forall n~(e_n:\tau_n\wedge\tau_n \leqslant \sigma_n)}{A\vdash e'(e_0,..e_n): \sigma'}
+        \\\\
+        \textsc{define:}&\mspace{20mu}
+        \frac{A_x \vdash e:\tau\mspace{20mu} \texttt{var}~x~=~e}{A\vdash x: \tau}
+        \\\\
+        \textsc{declare:}&\mspace{20mu}
+        \frac{A_x \vdash \texttt{var}~x}{A\vdash x: Any}
+        \\\\
+        \textsc{property:}&\mspace{20mu}
+        \frac{A \vdash e:Object<y:\tau>}{A\vdash e\texttt{.}y:\tau}
+        \\\\
+        \textsc{array element:}&\mspace{20mu}
+        \frac{A \vdash e:Array<\tau>\mspace{20mu} e':Number}{A\vdash e\texttt{[}e'\texttt{]}:\tau}
+        \\\\
+        \textsc{computed member:}&\mspace{20mu}
+        \frac{A \vdash e:Object<ps>\mspace{20mu} e':String}{A\vdash e\texttt{[}e'\texttt{]}:Any}
+      \end{flalign*}
+
+      We verify our system against these rules by creating property-based tests for each of them (except the function rule, discussed ahead). Below is an extract of each property based test and the rationale behind it:
+
+      \begin{lstlisting}
+      property("Variable") = forAll { (id: Ident, p: Expr) =>
+        implicit val st: ScopeStack = new ScopeStack
+
+        statement2f(Declare(Seq(id.name -> Some(p)), pos))
+
+        Ident(id.name, pos).t.actualT == p.t
+      }
+      \end{lstlisting}
+
+      Note that in Scala the final expression in a method is used as the return value, so in our tests the predicate is at the end.
+
+      This first test case tests the almost tautological principle that when a variable is declared with a value, any reference to that variable will share the type of that value. We test that simply here by taking in an arbitrary identifier and expression, declaring a variable with those properties, and later referencing the variable, checking its type is the same as the type of the expression we were given.
+
+      The expression itself could be a simple primitive or arbitrarily deep chain of arrays or of functions returning functions, and similarly the identifier name could be 1 letter or hundreds of thousands of characters long.
+
+      Our next test case is for function calls:
+
+      \begin{lstlisting}
+property("Call") = forAll { (name: Option[IdentName],
+                              ps: List[(Ident, Expr)],
+                              rt: (Ident, Expr)) =>
+  implicit val i: ScopeStack = new ScopeStack
+
+  expr2f(JsFunction(name.map(_.s),
+                    rt._1.name +: ps.map(_._1.name),
+                    Seq(Return(rt._1, pos)),
+                    pos))
+    .t.applyCall(expr2f(rt._2) +: ps.map(_._2).map(expr2f))
+    .actualT == rt._2.t
+}
+      \end{lstlisting}
+
+      Slightly more complicated than the previous case, this generates an arbitrary length list of arguments, and uses them to construct a function which also returns a known (but auto-generated) value. We then apply the parameters to the function we have created and ensure the type that is returned after the application is the same as the known type of the returned value.
+
+      The next two cases, declaration and definition, are similar:
+
+      \begin{lstlisting}
+property("Define") = forAll { (i: IdentName, e: Expr) =>
+  implicit val st: ScopeStack = new ScopeStack
+  statement2f(Declare(Seq(i.s -> Some(e)), pos))
+  val programTypes = st.typeOf(i.s)
+  Ident(i.s, pos).t.actualT == e.t
+}
+
+property("Declare") = forAll { (i: IdentName) =>
+  implicit val st: ScopeStack = new ScopeStack
+  statement2f(Declare(Seq(i.s -> None), pos))
+  val programTypes = st.typeOf(i.s)
+  Ident(i.s, pos).t.actualT == AnyT
+}
+      \end{lstlisting}
+
+      These are similar to the variable test case, since we need to access a value in scope to ensure the assignment was correctly processed. The first case ensures the variable has the type of the provided expression, while the second checks that a variable declared but left unassigned is of the inferred type \texttt{AnyT}.
+
+      In the next case, we specify a constraint on the input generator to ensure our list is non-empty:
+      \begin{lstlisting}
+property("Property") = forAll(
+  Gen.nonEmptyListOf(arbitrary[(IdentName, Expr)])
+) { (props) =>
+  implicit val st: ScopeStack = new ScopeStack
+
+  val ps = props.map { case (id, exp) => id.s -> exp }
+  val (propN, propT) = props.head
+  Member(JsObject(ps.toMap, pos), propN.s, pos).t == propT.t
+}
+      \end{lstlisting}
+
+      We generate an object with an arbitrary size and complexity of properties (which could in turn be arbitrarily deep objects), and take one property from the provided input. We then use the \texttt{Member} AST Node to represent accessing a property on that object, and check that the calculated type is the same as the type of the property. That is to say, this case proves that for any object with any number of properties, accessing a member of that object returns a value with the correct type, for example that \texttt{\{a: 4\}.a} is \texttt{Number}.
+
+
+      \begin{lstlisting}
+  property("Array Element") = forAll { (a: JsArray) =>
+    implicit val st: ScopeStack = new ScopeStack
+
+    a.t match {
+      case ConstT(TArray(t)) => t == CompMem(a, LiteralNum("0", "0", pos), pos).t
+      case _ => false
+    }
+  }
+      \end{lstlisting}
+
+      This case ensures that any numeric property access on an Array, for example \texttt{[1,3,4][0]} returns an element with the inner type of that array. We do this by pattern matching on the array's type to get its inner type, and comparing that against the resulting type of a computed member access operation.
+
+      \begin{lstlisting}
+property("Computed Member") = forAll { (prop: IdentName) =>
+  implicit val st: ScopeStack = new ScopeStack
+  CompMem(emptyObject, LiteralStr(prop.s, pos), pos).t == AnyT
+}
+      \end{lstlisting}
+
+      The final case tests the values of computed members of objects. We always dynamically access a property of an empty object, and ensure that regardless of what the property is called, the resulting value is of type \texttt{AnyT}, as according to our type system.
+
     \subsection{Unification}
+      With the axioms of the type system now tested, we go on to ensure that the rules for unification as we defined them hold. Before we review the test implementations, lets review the definitions of the unification steps:
+
+      \begin{flalign*}
+        \gamma&\cap\gamma~&=&~\gamma\\
+        Object<ps_1>&\cap~Object<ps_2>~&=&~Object<ps_1\cap ps_2>\\
+        Array<\sigma_1>&\cap~Array<\sigma_2>~&=&~Array<\sigma_1 \cap \sigma_2>\\
+        Function<ps_{0..n}, \sigma_1>&\cap~Function<qs_{0..n}, \sigma_2>~&=&~Function<zipWith(\cap, ps, qs),\\
+        & & &~~~~~~~~~~~~~~~~~~\sigma_1\cap\sigma_2> & \\
+        Any&\cap~other~&=&~other\\
+        \{\sigma_1,..\sigma_n\}&\cap~\sigma_n~&=&~\sigma_n\\
+      \end{flalign*}
+
+      Our first case we verify that constant intersection happens in line with the rules:
+      \begin{lstlisting}
+  property("Const intersection") = forAll { (lhs: ConstT, rhs: ConstT) =>
+    implicit val st: ScopeStack = new ScopeStack
+
+    lhs intersect rhs match {
+      case ConstT(t)      if t == lhs.t && t == rhs.t => true
+      case NoInterErr(ts) if lhs.t != rhs.t && ts == Set(lhs, rhs) => true
+      case _ => false
+    }
+  }
+      \end{lstlisting}
+
+      Given two constants, we verify that the unification should be \texttt{ConstT} when the types are the same and an error when the types are different. Object intersection is slightly trickier:
+      \begin{lstlisting}
+  property("Object Intersection") = forAll { (commonProp: (IdentName, DirectType),
+                                              ps1: Seq[(IdentName, DirectType)],
+                                              ps2: Seq[(IdentName, DirectType)]) =>
+    implicit val st: ScopeStack = new ScopeStack
+
+    val o1 = TObject(collection.mutable.Map((commonProp._1.s -> commonProp._2) +: ps1.map(i => i._1.s -> i._2): _*))
+    val o2 = TObject(collection.mutable.Map((commonProp._1.s -> commonProp._2) +: ps2.map(i => i._1.s -> i._2): _*))
+
+    o1 intersect o2 match {
+      case ConstT(TObject(ps)) => ps.nonEmpty && ps(commonProp._1.s) == commonProp._2
+      case _ => false
+    }
+  }
+    \end{lstlisting}
+
+      To perform this we take one set of properties for each object, and one property which will be common between the objects. We then interesct the two types, ensuring that the interesction is an object with a non-empty set of properties, and that the common property is present.
+
+      Next is array intersection:
+      \begin{lstlisting}
+  property("Array Intersection") = forAll { (a1: TArray, a2: TArray) =>
+    implicit val st: ScopeStack = new ScopeStack
+
+    a1.t intersect a2.t match {
+      case e: TypeError => (ConstT(a1) intersect ConstT(a2)).isInstanceOf[TypeError]
+      case exp => (ConstT(a1) intersect ConstT(a2)) == ConstT(TArray(exp))
+    }
+  }
+      \end{lstlisting}
+
+      Here we check that when the inner types cannot intersect, that the Array types themselves cannot intersect either. We also check that result of intersecting 2 arrays is the same as wrapping the intersection of the two inner types inside of an array type constructor.
+
+      \begin{lstlisting}
+property("Function Intersection") = forAll { (f1: TFunction, f2: TFunction) =>
+  implicit val st: ScopeStack = new ScopeStack
+
+  f1 intersect f2 match {
+    case e: TypeError => (ConstT(f1) intersect ConstT(f2)).isInstanceOf[TypeError]
+    case exp =>
+      f1.params.length == f2.params.length &&
+      f1.params.zip(f2.params).forall(ps => (ps._1 canSatisfy ps._2) || (ps._2 canSatisfy ps._1)) &&
+        ((f1.result canSatisfy f2.result) || (f2.result canSatisfy f1.result))
+  }
+}
+      \end{lstlisting}
+
+      For function intersection ensure that if the intersection of 2 functions is not a type error, that every parameter in each function can satisfy the type constraints of the other function, and that the return types have some common values too. In this way we ensure that no function unification can happen when the functions being unified have diverging types. Additionally we ensure that the parameter lengths of the functions are the same, and that unifying types with different parameter lengths returns a type error.
+
+      \begin{lstlisting}
+  property("Any intersection") = forAll { (t: DirectType) =>
+    implicit val st: ScopeStack = new ScopeStack
+    (AnyT intersect t) == t
+  }
+      \end{lstlisting}
+
+      The simplest case is for intersection of a type with \texttt{AnyT}, which returns the known type case.
+
+      \begin{lstlisting}
+  property("SetT intersection") = forAll { (c: ConstT, s: SetT) =>
+    implicit val st: ScopeStack = new ScopeStack
+    s intersect c match {
+      case ConstT(t) => s.ts.contains(t)
+      case e: NoInterErr => !s.ts.contains(c.t)
+      case _ => false
+    }
+  }
+      \end{lstlisting}
+
+      And finally we ensure that when a constant and a set are intersected, that the result a constant, when the constant is present in the set, or a type error otherwise.
 
 \chapter{Evaluation}
 \chapter{Conclusion}
