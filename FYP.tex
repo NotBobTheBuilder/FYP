@@ -20,6 +20,7 @@
 \usepackage[sorting=nyt,style=apa]{biblatex}
 \DeclareLanguageMapping{british}{british-apa}
 \addbibresource{bhamthesis.bib}
+\usepackage[toc,page]{appendix}
 
 \newtheorem*{thm}{Theorem}
 
@@ -53,11 +54,18 @@
 \maketitle
 
 \begin{abstract}
+  In this report we present a summary of Miller, a static type checking program for JavaScript, which detects type errors in JavaScript source code through a process of static analysis.. We surpass some limitations of existing tools with a strategy that is able to detect type errors in cases such as polymorphic functions which no present implementation can detect, while also deferring to the judgement of the end users in cases where types are not statically inferable. Additionally our implementation requires no modification to existing source code, and particularly no type annotations which some existing tools require. We also give grounds for confidence in the quality of the tool's analysis through the use of unit testing and property based testing, in which arbitrarily complex test cases are formulated and the results validated against a formalised type system.
+
+  The source code for this project is available both on the University of Birmingham subversion server at the below URL:
+
+    https://codex.cs.bham.ac.uk/svn/projects/2015/jxw230
 \end{abstract}
 
 \tableofcontents
 
 \chapter{Introduction}
+
+  JavaScript is a dynamically typed programming language which has come to be the de-facto language of the web. The only language to have an implementation in every major browser, JavaScript
 
 \chapter{Background}
 
@@ -157,7 +165,7 @@
 
   [] - clarity
 
-  ???
+  [] - Ease of integration into existing build tools
 
 \chapter{Analysis}
 
@@ -1190,4 +1198,18 @@ property("Function Intersection") = forAll { (f1: TFunction, f2: TFunction) =>
 \chapter{Conclusion}
 
 \printbibliography
+
+\begin{appendices}
+\chapter{Submitted materials structure}
+Submitted with the digital version of this report is an archive containing the source code of the initial OCaml implementation and Scala implementation. The former is only likely to be of interest for the purposes of curiosity, given the final submission is implemented in Scala, and included with the latter is a compiled version which can be executed on the command line.
+
+\section{Compilation}
+Should you wish to compile the sources yourself, the easiest way to do so is through installing SBT, the Scala Build Tool. For Mac users SBT is available in homebrew, and can be installed with \texttt{brew install sbt}. SBT and Scala are also available for most Linux distributions, and users should check their own repositories for the precise name of the package. Once installed, the source can be executed with \texttt{sbt run} (which will also handle downloading dependencies), or a JAR can be created with \texttt{sbt assembly}.
+
+\section{Execution}
+If you'd rather make use of the included JAR file, it should be possible to execute on any Unix system simply by running \texttt{./miller.jar <inputfile.js>}. Alternatively if no source file is specified, the program will take the source code from standard input, which should be closed when a program is entered with \texttt{ctrl-d}. Add the \texttt{-v} flag when running the software to see a full type-annotated version of the abstract syntax tree.
+
+
+\end{appendices}
+
 \end{document}
