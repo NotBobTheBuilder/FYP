@@ -1,6 +1,6 @@
-\documentclass[british, twoside]{bhamthesis}
+\documentclass[british, twoside, openright]{bhamthesis}
 \title{Applying Static Type Checking to JavaScript}
-\author{Jack Wearden}
+\author{Jack Wearden\\1249421}
 \supervisor{Hayo Thielecke}
 \degree{BSc. Computer Science}
 \department{Computer Science}
@@ -1306,11 +1306,40 @@ property("Function Intersection") = forAll { (f1: TFunction, f2: TFunction) =>
       And finally we ensure that when a constant and a set are intersected, that the result a constant, when the constant is present in the set, or a type error otherwise.
 
 \chapter{Evaluation}
+  Miller is now capable of identifying type errors as required by the project specification. As highlighted in the testing section the software can identify type errors in complex program structures consistently, and can do so within a type system designed to follow the semantics of JavaScript without imposing any new meanings or types onto programs. While the development process did take an unexpected turn in the form of a programming language change from OCaml to Scala, this didn't adversely affect the quality of the software, instead making much more exhaustive testing possible, and improving the quality of the code.
 
+  \section{Process}
+    The use of Test Driven Development as part of the implementation strategy was helpful to the project, not least because it ensured that no regressions occurred, even after the switch between programming languages. It also served to guide development because the introduction of increasingly complex test cases (followed by the property-based testing of arbitrarily complex test cases) ensured that the implemented algorithms were capable of functioning correctly on all features of the language.
+
+    Additionally, the heavy use of testing was a great support in maintaining the ongoing quality of the code. In particular, though the code was checked into the School Subversion server, it was primarily used on GitHub with integration to Travis CI, a continuous integration service. Every time code was pushed to travis, the unit and property tests were run across a number of platforms. This ensured that the stability seen locally wasn't due to environmental factors, and that the quality of the implementation was verifiable independently.
+
+    The most notable problem in the implementation process was the switch that occurred from OCaml to Scala. In hindsight this was the result of a poor set of criteria for evaluating the language of implementation, notably that there was too much weight given to the structure of the parsing libraries in each language. While it was important to get the parser right, the disparities between implementations were so small as to be negligible. At this point it would have been wiser to evaluate the rest of the programming languages, and particularly the language features that would be needed for analysis, and in hindsight using this strategy may have avoided any OCaml implementation at all.
+
+  \section{Fitness for purpose}
+    Without replicating all of the specification here, the core aims of the project were to produce software capable of performing type analysis without requiring any time investment on the part of a programmer. It's now possible to run Miller over existing sources without anything like the complexity that comes with setting up Flow for a project, nor any requirement to provide extra type annotations.
+
+    We additionally use standard patterns for error reporting such as using standard error and returning appropriate program exit codes, and doing so with meaningful errors that can highlight the exact location that type errors occur, along with an appropriate description of what they are.
+
+    In terms of the accuracy and consistency of the tool, the extensive testing - especially of the type system on which the rules are based - gives cause for confidence in the quality of the tool.
+
+  \section{Future work}
+    While it's possible to say that Miller meets all of the specification requirements, it's clear there is some room for future improvements, to both Miller and the Scala ecosystem. In particular there is room to improve the efficiency of the parser toolchain - the current use of parser combinators could be greatly improved if it were redesigned with performance in mind. Something that may support this is an improved set of tools for the development of large and complex grammars.
+
+    Work specific to Miller that could be improved would be the refactoring of the \texttt{ScopeStack} and \texttt{IntersectT} types. While the current implementation functions well enough, it could be improved by to fall back on more traditional methods for unifying polymorphic type variables, rather than the method designed here in which variables share a global mapping of variables to types.
+
+    Another potential improvement could be the refactoring of the connection between typed and untyped ASTs. Presently there are two inheritance hierarchies and sets of classes representing each type of AST. In future this could be refactored to just one AST class, perhaps with the type defined as a lazy property which is only evaluated when inference begins. Though the current class structure isn't presently a problem, it does contain some repetition and could be improved by refactoring that away.
+
+    Future work which investigated the independent specification of grammars and parsers would be of great value. Of particular value would be a system that allowed the creation of a grammar which was then used to create both a parser and a generator for arbitrary source programs matching that grammar. That generator could then be used as the basis for property based testing, to ensure that any program following that grammar would be accepted by the parser.
+
+    Additionally, the fragmented nature of web browsers means that not all JavaScript interpreters are created equal. Future work could go on to warn users when they make use of language features that might not behave consistently across browsers.
 
 \chapter{Conclusion}
 
-  In summary, the program constructed at the end of this project is capable of performing type checking on JavaScript programs without the need for any new syntax for type annotation. This, in conjunction with the use of standard command-line interface patterns such as the use of the standard error stream and exit codes that vary depending on the detection of errors, means the project is usable today by real-world developers without the need to alter or prepare the project in any way. While type checking is not exhaustive, and there is still potential for type errors in programs checked by this tool, that potential is substantially mitigated in compared to both plain, unchecked JavaScript code, and also compared to the capabilities of existing type checking tools such as Flow.
+  In summary, the program constructed at the end of this project is capable of performing type checking on JavaScript programs without the need for any new syntax for type annotation. This, in conjunction with the use of standard command-line interface patterns such as the use of the standard error stream and exit codes that vary depending on the detection of errors, means the project is usable today by real-world developers without the need to alter or prepare their own software in any way.
+
+  While type checking within Miller is not exhaustive, and there is still potential for type errors in programs checked by this tool, that potential is substantially mitigated in compared to both plain, unchecked JavaScript code, and also compared to the capabilities of existing type checking tools such as Flow.
+
+  As such, we meet our objectives with a tool that is capable of using some existing and some novel techniques for static analysis to detect type errors within JavaScript.
 
 \printbibliography
 
