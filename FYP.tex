@@ -54,7 +54,7 @@
 \maketitle
 
 \begin{abstract}
-  In this report we present a summary of Miller, a static type checking program for JavaScript, which detects type errors in JavaScript source code through a process of static analysis.. We surpass some limitations of existing tools with a strategy that is able to detect type errors in cases such as polymorphic functions which no present implementation can detect, while also deferring to the judgement of the end users in cases where types are not statically inferable. Additionally our implementation requires no modification to existing source code, and particularly no type annotations which some existing tools require. We also give grounds for confidence in the quality of the tool's analysis through the use of unit testing and property based testing, in which arbitrarily complex test cases are formulated and the results validated against a formalised type system.
+  In this report we present a summary of Miller, a static type checking program for JavaScript, which detects type errors in JavaScript source code through a process of static analysis. We surpass some limitations of existing tools with a strategy that is able to detect type errors in cases such as polymorphic functions which no present implementation can accurately detect, while also deferring to the judgement of the end users in cases where types are not statically inferable. Additionally our implementation requires no modification to existing source code, and particularly no type annotations which some existing tools require. We also give grounds for confidence in the quality of the tool's analysis through the use of unit testing and property based testing, in which arbitrarily complex test cases are formulated and the results validated against a formalised type system.
 
   The source code for this project is available both on the University of Birmingham subversion server at the below URL:
 
@@ -65,7 +65,15 @@
 
 \chapter{Introduction}
 
-  JavaScript is a dynamically typed programming language which has come to be the de-facto language of the web. The only language to have an implementation in every major browser, JavaScript
+  JavaScript is a dynamically typed programming language which has come to be the de-facto language of the web. The only language to have an interpreter in every major browser, the use of JavaScript is a requirement for developers who want to embed dynamic content in webpages.
+
+  It's interpreted nature means that it comes with lots of room for error, as there is no static analysis stage for JavaScript - the code is simply written, downloaded by a browser and executed. Should an error occur, either in the syntax or semantics of the program, the browser will simply stop execution of the script, and has no way of reporting the crash to developers.
+
+  This has resulted in a rich ecosystem of code quality tools being designed to support JavaScript, and in some caeses surpass it completely. Task Runners are used to chain together steps of testing and deployment, consisting of projects like linters, unit tests, and even browser-based testing in which developers specify behaviour and expected results which are then tested by automated browsers.
+
+  This project aims to add additional resources to that ecosystem by creating a tool which analyses JavaScript programs looking specifically for type errors, using some existing and some new techniques for their detection.
+
+  Ahead in this report, we look at the existing work in this area in the Background section and formulate a set of requirements for the project in the Specification. We go on to investigate existing research in the Analysis chapter, and using our results formulate a set of type system and unification rules in our Design section. Following this is a summary of how the system was implemented and tested in the Implementation and Testing sections respectively, followed by an evaluation of the project's outcomes.
 
 \chapter{Background}
 
